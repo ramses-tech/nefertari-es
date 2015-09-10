@@ -1,0 +1,7 @@
+mock
+pytest
+pytest-cov
+sphinx
+
+-e .
+-e ../nefertari
