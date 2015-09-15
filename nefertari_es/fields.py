@@ -4,13 +4,14 @@ from elasticsearch_dsl import (
     Date,
     Field,
     String,
+    Integer,
     )
 
 
 DateField = Date
 StringField = String
 TextField = String
-IdField = String # XXX
+IntField = Integer
 
 
 class DateTimeField(Field):

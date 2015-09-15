@@ -8,7 +8,7 @@ from .documents import BaseDocument
 from .fields import (
     DateField,
     DateTimeField,
-    IdField,
+    IntField,
     StringField,
     TextField,
     )
@@ -17,11 +17,12 @@ __all__ = [
     'BaseDocument',
     'DateField',
     'DateTimeField',
-    'IdField',
+    'IntField',
     'StringField',
     'TextField',
     'setup_database',
     'get_document_classes',
+    'is_relationship_field',
     ]
 
 
@@ -51,5 +52,10 @@ def setup_database(config):
 
 
 def get_document_classes():
-    # XXX - elasticsearch-dsl doesn't seem to have a registry of docs
+    # XXX
     return {}
+
+
+def is_relationship_field(field, model_cls):
+    # XXX
+    return False
