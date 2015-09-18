@@ -13,6 +13,7 @@ from .fields import (
     TextField,
     )
 
+
 __all__ = [
     'BaseDocument',
     'DateField',
@@ -51,9 +52,19 @@ def setup_database(config):
     connections.create_connection(serializer=serializer, **params)
 
 
+def get_document_cls(name):
+    from .base import get_document
+    try:
+        return get_document('name')
+    except KeyError:
+        raise ValueError('`%s` does not exist in elasticsearch' % name)
+
+
 def get_document_classes():
-    # XXX
-    return {}
+    """ Get all defined not abstract document classes. """
+    # TODO: Drop base/abstract document classes
+    from .base import _document_registry
+    return _document_registry.copy()
 
 
 def is_relationship_field(field, model_cls):
