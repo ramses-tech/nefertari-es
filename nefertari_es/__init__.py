@@ -5,6 +5,10 @@ from nefertari.utils import (
     split_strip,
     )
 from .documents import BaseDocument
+from .meta import (
+    get_document_cls,
+    get_document_classes,
+    )
 from .fields import (
     DateField,
     DateTimeField,
@@ -22,6 +26,7 @@ __all__ = [
     'StringField',
     'TextField',
     'setup_database',
+    'get_document_cls',
     'get_document_classes',
     'is_relationship_field',
     ]
@@ -50,21 +55,6 @@ def setup_database(config):
     # about es - they should just know how to serialize their
     # documents to JSON.
     connections.create_connection(serializer=serializer, **params)
-
-
-def get_document_cls(name):
-    from .base import get_document
-    try:
-        return get_document('name')
-    except KeyError:
-        raise ValueError('`%s` does not exist in elasticsearch' % name)
-
-
-def get_document_classes():
-    """ Get all defined not abstract document classes. """
-    # TODO: Drop base/abstract document classes
-    from .base import _document_registry
-    return _document_registry.copy()
 
 
 def is_relationship_field(field, model_cls):

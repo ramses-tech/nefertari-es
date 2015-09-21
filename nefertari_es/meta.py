@@ -1,21 +1,11 @@
 from elasticsearch_dsl.document import DocTypeMeta
 
-__all__ = (
-    '_document_registry',
-    'get_document',
-    'RegisteredDocumentMeta',
-)
-
-
-"""
-Simple BaseDocument subclasses registry inspired by mongoengine documents
-registry.
-Stores pairs of {"BaseDocumentName": BaseDocument}.
-"""
+# BaseDocument subclasses registry
+# maps class names to classes
 _document_registry = {}
 
 
-def get_document(name):
+def get_document_cls(name):
     """ Get BaseDocument subclass from document registry.
 
     :param name: String name of BaseDocument subclass to get
@@ -23,6 +13,11 @@ def get_document(name):
     :raises KeyError: If document class is not defined
     """
     return _document_registry[name]
+
+
+def get_document_classes():
+    """ Get all defined not abstract document classes. """
+    return _document_registry.copy()
 
 
 class RegisteredDocumentMeta(DocTypeMeta):
