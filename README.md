@@ -6,19 +6,24 @@ Backend and search engine for Nefertari
 
 Some issues to get basic engine working
 
-- deal with model `get` and `to_dict` having different symantics in
-  elasticsearch-dsl and nefertari. figure out where in nefertari these
-  methods are called, and whether its OK to mostly use the elasticsearch-dsl
-  symatics.
+- deal with model `to_dict` having different symantics in
+  elasticsearch-dsl and nefertari. maybe this isn't an issue.
 
 - figure out how to access es-dsl class registry in order to implement
   `get_document_classes`.
 
-- Translate from `__tablename__` to document class meta info. Right now
-  you need to put a Meta class on model classes.
+- are we dealing with `pk_field` correctly? right now we're not
+  setting `_id` on the collection, and letting es choose it for us. is
+  this a problem? are `get_item` queries slower by our own index than
+  by `_id`?
 
-- figure out interface (e.g. expected arguments and return values) for
-  `BaseDocument` methods - `get_resource`, `get_collection`.
+- implement `get_collection` and write some tests
+
+- make sure that it's OK not to implement `filter_objects`. Seems like
+  this method doen't makes sense for this engine, cause it seems to be
+  used to convert es query results to doc instances for other
+  engines. probably we need to refactor how this happens when we
+  implement query delegation, e.g. having multiple engines defined.
 
 - Write a bunch of field classes, but only those that make sense for es
 
