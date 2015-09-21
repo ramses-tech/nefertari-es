@@ -14,7 +14,7 @@ Some issues to get basic engine working
   this a problem? are `get_item` queries slower by our own index than
   by `_id`?
 
-- implement `get_collection` and write some tests
+- finish implementing `get_collection` and write some tests for it.
 
 - make sure that it's OK not to implement `filter_objects`. Seems like
   this method doen't makes sense for this engine, cause it seems to be
