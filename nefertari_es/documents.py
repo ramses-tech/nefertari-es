@@ -40,7 +40,7 @@ class BaseDocument(DocType):
 
     @classmethod
     def get_item(cls, __raise_on_empty=True, **kw):
-         """ Get single item and raise exception if not found.
+        """ Get single item and raise exception if not found.
 
         Exception raising when item is not found can be disabled
         by passing ``__raise_on_empty=False`` in params.
