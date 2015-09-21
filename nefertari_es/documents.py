@@ -1,7 +1,16 @@
-from six import add_metaclass
+from six import (
+    add_metaclass,
+    string_types,
+    )
 from elasticsearch_dsl import DocType
 from nefertari.json_httpexceptions import JHTTPNotFound
-
+from nefertari.utils import (
+    process_fields,
+    process_limit,
+    dictset,
+    drop_reserved_params,
+    split_strip,
+    )
 from .meta import RegisteredDocumentMeta
 
 
@@ -145,12 +154,61 @@ class BaseDocument(DocType):
             query.
         """
 
-        # XXX should we suport query_set?
+        # XXX should we support query_set?
 
-        return cls.search().execute().hits
+        q = cls.search()
+
+        if _limit is not None:
+            start, limit = process_limit(_start, _page, _limit)
+            q = q.extra(from_=start, size=limit)
+
+        if _fields:
+            include, exclude = process_fields(_fields)
+            # XXX partial fields support isn't yet released. for now
+            # we just use fields, later we'll add support for excluded fields
+            q = q.fields(include)
+
+        if params:
+            params = _cleaned_query_params(cls, params, __strict)
+            if params:
+                # XXX use query rather than filter? maybe filter on
+                # some and query on others depending on the field type
+                q = q.filter('term', **params)
+
+        if _count:
+            # XXX use search_type = count? probably more efficient
+            return q.execute().hits.total
+
+        if _sort:
+            # XXX implement sort
+            pass
+
+        return q.execute().hits
+
 
 
     @classmethod
     def get_field_params(cls, field):
         # XXX - seems to be used to provide field init kw args
         return None
+
+
+
+def _cleaned_query_params(cls, params, strict):
+    params = {
+        key: val for key, val in params.items()
+        if not key.startswith('__') and val != '_all'
+    }
+
+    # XXX support field__bool and field__in/field__all queries?
+    # process_lists(params)
+    # process_bools(params)
+
+    if strict:
+        # XXX - check fields
+        pass
+    else:
+        # XXX - remove bad fields
+        pass
+
+    return params

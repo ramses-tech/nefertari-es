@@ -9,9 +9,6 @@ Some issues to get basic engine working
 - deal with model `to_dict` having different symantics in
   elasticsearch-dsl and nefertari. maybe this isn't an issue.
 
-- figure out how to access es-dsl class registry in order to implement
-  `get_document_classes`.
-
 - are we dealing with `pk_field` correctly? right now we're not
   setting `_id` on the collection, and letting es choose it for us. is
   this a problem? are `get_item` queries slower by our own index than
