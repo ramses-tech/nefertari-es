@@ -1,7 +1,11 @@
+from six import add_metaclass
 from elasticsearch_dsl import DocType
 from nefertari.json_httpexceptions import JHTTPNotFound
 
+from .base import RegisteredDocumentMeta
 
+
+@add_metaclass(RegisteredDocumentMeta)
 class BaseDocument(DocType):
 
     def save(self, request=None):
