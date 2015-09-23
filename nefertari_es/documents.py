@@ -3,7 +3,10 @@ from six import (
     string_types,
     )
 from elasticsearch_dsl import DocType
-from nefertari.json_httpexceptions import JHTTPNotFound
+from nefertari.json_httpexceptions import (
+    JHTTPBadRequest,
+    JHTTPNotFound,
+    )
 from nefertari.utils import (
     process_fields,
     process_limit,
@@ -60,28 +63,31 @@ class BaseDocument(DocType):
 
         :returns: Single collection item as an instance of ``cls``.
         """
-        params = {}
-        for k, v in kw.items():
-            if k in cls._doc_type.mapping:
-                params[k] = v
-        result = cls.search().filter('term', **params).execute()
-        if not result and __raise_on_empty:
-            msg = "'%s(%s)' resource not found" % (cls.__name__, params)
-            raise JHTTPNotFound(msg)
+        result = cls.get_collection(
+            _limit=1, _item_request=True,
+            **kw
+            )
+        if not result:
+            if __raise_on_empty:
+                msg = "'%s(%s)' resource not found" % (cls.__name__, kw)
+                raise JHTTPNotFound(msg)
+            return None
         return result[0]
 
     @classmethod
     def _update_many(cls, items, params, request):
+        # XXX
         pass
 
     @classmethod
     def _delete_many(items, request):
+        # XXX
         pass
 
     @classmethod
     def get_collection(cls, _count=False, __strict=True, _sort=None,
                        _fields=(), _limit=None, _page=None, _start=None,
-                       _query_set=None,
+                       _query_set=None, _item_request=False,
                        **params):
         """ Query collection and return results.
 
@@ -155,6 +161,8 @@ class BaseDocument(DocType):
         """
 
         # XXX should we support query_set?
+        # XXX should we support _explain?
+        # XXX do we need special support for _item_request
 
         q = cls.search()
 
@@ -164,6 +172,8 @@ class BaseDocument(DocType):
 
         if _fields:
             include, exclude = process_fields(_fields)
+            if __strict:
+                _validate_fields(include + exclude)
             # XXX partial fields support isn't yet released. for now
             # we just use fields, later we'll add support for excluded fields
             q = q.fields(include)
@@ -171,8 +181,6 @@ class BaseDocument(DocType):
         if params:
             params = _cleaned_query_params(cls, params, __strict)
             if params:
-                # XXX use query rather than filter? maybe filter on
-                # some and query on others depending on the field type
                 q = q.filter('term', **params)
 
         if _count:
@@ -180,12 +188,21 @@ class BaseDocument(DocType):
             return q.execute().hits.total
 
         if _sort:
-            # XXX implement sort
-            pass
+            fields = split_strip(_sort)
+            if __strict:
+                _validate_fields(
+                    cls,
+                    [f[1:] if f.startswith('-') else f for f in fields]
+                    )
+            q = q.sort(*fields)
 
-        return q.execute().hits
-
-
+        hits = q.execute().hits
+        hits._nefertari_meta = dict(
+            total=hits.total,
+            start=_start,
+            fields=_fields
+            )
+        return hits
 
     @classmethod
     def get_field_params(cls, field):
@@ -205,10 +222,22 @@ def _cleaned_query_params(cls, params, strict):
     # process_bools(params)
 
     if strict:
-        # XXX - check fields
-        pass
+        _validate_fields(cls, params.keys())
     else:
-        # XXX - remove bad fields
-        pass
+        field_names = frozenset(cls._doc_type.mapping)
+        param_names = frozenset(params.keys())
+        invalid_params = param_names.difference(field_names)
+        for key in invalid_params:
+            del params[key]
 
     return params
+
+
+def _validate_fields(cls, field_names):
+    valid_names = frozenset(cls._doc_type.mapping)
+    names = frozenset(field_names)
+    invalid_names = names.difference(valid_names)
+    if invalid_names:
+         raise JHTTPBadRequest(
+            "'%s' object does not have fields: %s" % (
+            cls.__name__, ', '.join(invalid_names)))
