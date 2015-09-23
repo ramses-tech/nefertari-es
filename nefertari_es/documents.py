@@ -76,13 +76,19 @@ class BaseDocument(DocType):
 
     @classmethod
     def _update_many(cls, items, params, request):
-        # XXX
-        pass
+        # XXX do in bulk
+        count = len(items)
+        for item in items:
+            item.update(params)
+        return count
 
     @classmethod
-    def _delete_many(items, request):
-        # XXX
-        pass
+    def _delete_many(cls, items, request):
+        # XXX do in bulk
+        count = len(items)
+        for item in items:
+            item.delete()
+        return count
 
     @classmethod
     def get_collection(cls, _count=False, __strict=True, _sort=None,

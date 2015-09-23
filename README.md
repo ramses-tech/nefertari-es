@@ -14,13 +14,20 @@ Some issues to get basic engine working
   this a problem? are `get_item` queries slower by our own index than
   by `_id`?
 
-- finish implementing `get_collection` and write some tests for it.
-
 - make sure that it's OK not to implement `filter_objects`. Seems like
   this method doen't makes sense for this engine, cause it seems to be
   used to convert es query results to doc instances for other
   engines. probably we need to refactor how this happens when we
   implement query delegation, e.g. having multiple engines defined.
+
+- figure out how to use es bulk api, es-dsl document classes don't
+  seem to use it
+
+- implement `?q=query` style of collection querying. need to clarify
+  what the search grammar is here.
+  https://nefertari.readthedocs.org/en/stable/making_requests.html#query-syntax-for-elasticsearch
+  we should support `q` and `_search_fields`. But the code implies
+  that we can also provide a `body`.
 
 - Write a bunch of field classes, but only those that make sense for es
 
