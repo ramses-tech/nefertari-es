@@ -57,10 +57,16 @@ def setup_database(config):
     # about es - they should just know how to serialize their
     # documents to JSON.
     conn = connections.create_connection(serializer=serializer, **params)
+    setup_index(conn, settings)
 
+
+def setup_index(conn, settings):
     index_name = settings['index_name']
     if not conn.indices.exists([index_name]):
         create_index(index_name)
+    else:
+        for doc_cls in get_document_classes().values():
+            doc_cls._doc_type.index = index_name
 
 
 def is_relationship_field(field, model_cls):

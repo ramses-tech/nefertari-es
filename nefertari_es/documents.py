@@ -3,6 +3,7 @@ from six import (
     string_types,
     )
 from elasticsearch_dsl import DocType
+from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
     JHTTPNotFound,
@@ -33,7 +34,7 @@ class BaseDocument(DocType):
 
     def to_dict(self, **kw):
         # XXX do I need to deal with kw?
-        d = super(BaseDocument, self).to_dict()
+        d = super(BaseDocument, self).to_dict(**kw)
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently :-(
@@ -75,20 +76,25 @@ class BaseDocument(DocType):
         return result[0]
 
     @classmethod
-    def _update_many(cls, items, params, request):
-        # XXX do in bulk
-        count = len(items)
-        for item in items:
-            item.update(params)
-        return count
+    def _update_many(cls, items, params, **kw):
+        if not items:
+            return
+
+        actions = [item.to_dict(include_meta=True) for item in items]
+        for action in actions:
+            action.pop('_source')
+            action['doc'] = params
+        client = items[0].connection
+        return _bulk(actions, client, op_type='update', **kw)
 
     @classmethod
-    def _delete_many(cls, items, request):
-        # XXX do in bulk
-        count = len(items)
-        for item in items:
-            item.delete()
-        return count
+    def _delete_many(cls, items, **kw):
+        if not items:
+            return
+
+        actions = [item.to_dict(include_meta=True) for item in items]
+        client = items[0].connection
+        return _bulk(actions, client, op_type='delete', **kw)
 
     @classmethod
     def get_collection(cls, _count=False, __strict=True, _sort=None,
@@ -248,6 +254,32 @@ def _validate_fields(cls, field_names):
     names = frozenset(field_names)
     invalid_names = names.difference(valid_names)
     if invalid_names:
-         raise JHTTPBadRequest(
+        raise JHTTPBadRequest(
             "'%s' object does not have fields: %s" % (
             cls.__name__, ', '.join(invalid_names)))
+
+
+def _bulk(actions, client, op_type='index', request=None):
+    for action in actions:
+        action['_op_type'] = op_type
+
+    kwargs = {
+        'client': client,
+        'actions': actions,
+    }
+
+    if request is None:
+        query_params = {}
+    else:
+        query_params = request.params.mixed()
+    query_params = dictset(query_params)
+    # TODO: Use "elasticsearch.enable_refresh_query" setting here
+    refresh_enabled = False
+    if '_refresh_index' in query_params and refresh_enabled:
+        kwargs['refresh'] = query_params.asbool('_refresh_index')
+
+    executed_num, errors = helpers.bulk(**kwargs)
+    if errors:
+        raise Exception('Errors happened when executing Elasticsearch '
+                        'actions: {}'.format('; '.join(errors)))
+    return executed_num
