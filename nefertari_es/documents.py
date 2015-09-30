@@ -193,7 +193,6 @@ class BaseDocument(DocType):
             # we just use fields, later we'll add support for excluded fields
             search_obj = search_obj.fields(include)
 
-
         if params:
             params = _cleaned_query_params(cls, params, __strict)
             if params:
