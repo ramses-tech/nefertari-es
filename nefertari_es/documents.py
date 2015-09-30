@@ -100,7 +100,7 @@ class BaseDocument(DocType):
     def get_collection(cls, _count=False, __strict=True, _sort=None,
                        _fields=(), _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False,
-                       q=None, **params):
+                       _search_fields=None, q=None, **params):
         """ Query collection and return results.
 
         Notes:
@@ -149,6 +149,10 @@ class BaseDocument(DocType):
         :param bool __raise_on_empty: When True JHTTPNotFound is raised
             if query returned no results. Defaults to False in which case
             error is just logged and empty query results are returned.
+        :param q: Query string to perform full-text search with.
+        :param _search_fields: Coma-separated list of field names to use
+            with full-text search(q param) to limit fields which are
+            searched.
 
         :returns: Query results as ``elasticsearch_dsl.XXX`` instance.
             May be sorted, offset, limited.
@@ -179,7 +183,10 @@ class BaseDocument(DocType):
         search_obj = cls.search()
 
         if q is not None:
-            search_obj = search_obj.query('query_string', query=q)
+            query_kw = {'query': q}
+            if _search_fields is not None:
+                query_kw['fields'] = _search_fields.split(',')
+            search_obj = search_obj.query('query_string', **query_kw)
 
         if _limit is not None:
             start, limit = process_limit(_start, _page, _limit)
