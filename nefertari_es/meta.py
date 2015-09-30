@@ -5,6 +5,28 @@ from elasticsearch_dsl.document import DocTypeMeta
 _document_registry = {}
 
 
+def create_index(index_name, doc_classes=None):
+    """ Create index and add document classes to it.
+
+    Does NOT check whether index already exists.
+
+    :param index_name: Name of index to be created.
+    :param doc_classes: Sequence of document classes which should be
+        added to created index. Defaults to None, in which case all
+        document classes from document registry are added to new index.
+    """
+    from elasticsearch_dsl import Index
+    index = Index(index_name)
+
+    if doc_classes is None:
+        doc_classes = get_document_classes().values()
+
+    for doc_cls in doc_classes:
+        index.doc_type(doc_cls)
+
+    index.create()
+
+
 def get_document_cls(name):
     """ Get BaseDocument subclass from document registry.
 
