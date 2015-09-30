@@ -94,7 +94,7 @@ class BaseDocument(DocType):
     def get_collection(cls, _count=False, __strict=True, _sort=None,
                        _fields=(), _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False,
-                       **params):
+                       q=None, **params):
         """ Query collection and return results.
 
         Notes:
@@ -109,10 +109,6 @@ class BaseDocument(DocType):
             only fields defined on model, exception is raised if invalid
             fields are present. When False - invalid fields are dropped.
             Defaults to ``True``.
-        :param bool _item_request: Indicates whether it is a single item
-            request or not. When True and DataError happens on DB request,
-            JHTTPNotFound is raised. JHTTPBadRequest is raised when False.
-            Defaults to ``False``.
         :param list _sort: Field names to sort results by. If field name
             is prefixed with "-" it is used for "descending" sorting.
             Otherwise "ascending" sorting is performed by that field.
@@ -133,9 +129,13 @@ class BaseDocument(DocType):
             to None. Params ``_page`` and ``_start`` are mutually
             exclusive. If not offset-related params are provided, offset
             equals to 0.
-        :param Query query_set: Existing queryset. If provided, all queries
+        :param Query _query_set: Existing queryset. If provided, all queries
             are applied to it instead of creating new queryset. Defaults
             to None.
+        :param bool _item_request: Indicates whether it is a single item
+            request or not. When True and DataError happens on DB request,
+            JHTTPNotFound is raised. JHTTPBadRequest is raised when False.
+            Defaults to ``False``.
         :param _count: When provided, only results number is returned as
             integer.
         :param _explain: When provided, query performed(SQL) is returned
@@ -170,28 +170,32 @@ class BaseDocument(DocType):
         # XXX should we support _explain?
         # XXX do we need special support for _item_request
 
-        q = cls.search()
+        search_obj = cls.search()
+
+        if q is not None:
+            search_obj = search_obj.query('query_string', query=q)
 
         if _limit is not None:
             start, limit = process_limit(_start, _page, _limit)
-            q = q.extra(from_=start, size=limit)
+            search_obj = search_obj.extra(from_=start, size=limit)
 
         if _fields:
             include, exclude = process_fields(_fields)
             if __strict:
-                _validate_fields(include + exclude)
+                _validate_fields(cls, include + exclude)
             # XXX partial fields support isn't yet released. for now
             # we just use fields, later we'll add support for excluded fields
-            q = q.fields(include)
+            search_obj = search_obj.fields(include)
+
 
         if params:
             params = _cleaned_query_params(cls, params, __strict)
             if params:
-                q = q.filter('term', **params)
+                search_obj = search_obj.filter('term', **params)
 
         if _count:
             # XXX use search_type = count? probably more efficient
-            return q.execute().hits.total
+            return search_obj.execute().hits.total
 
         if _sort:
             fields = split_strip(_sort)
@@ -200,9 +204,9 @@ class BaseDocument(DocType):
                     cls,
                     [f[1:] if f.startswith('-') else f for f in fields]
                     )
-            q = q.sort(*fields)
+            search_obj = search_obj.sort(*fields)
 
-        hits = q.execute().hits
+        hits = search_obj.execute().hits
         hits._nefertari_meta = dict(
             total=hits.total,
             start=_start,
