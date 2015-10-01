@@ -8,6 +8,7 @@ from .documents import BaseDocument
 from .meta import (
     get_document_cls,
     get_document_classes,
+    create_index,
     )
 from .fields import (
     DateField,
@@ -28,6 +29,7 @@ __all__ = [
     'setup_database',
     'get_document_cls',
     'get_document_classes',
+    'create_index',
     'is_relationship_field',
     ]
 
@@ -54,7 +56,17 @@ def setup_database(config):
     # lots of repeated code, plus other engines shouldn't have to know
     # about es - they should just know how to serialize their
     # documents to JSON.
-    connections.create_connection(serializer=serializer, **params)
+    conn = connections.create_connection(serializer=serializer, **params)
+    setup_index(conn, settings)
+
+
+def setup_index(conn, settings):
+    index_name = settings['index_name']
+    if not conn.indices.exists([index_name]):
+        create_index(index_name)
+    else:
+        for doc_cls in get_document_classes().values():
+            doc_cls._doc_type.index = index_name
 
 
 def is_relationship_field(field, model_cls):

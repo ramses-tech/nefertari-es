@@ -3,6 +3,7 @@ from six import (
     string_types,
     )
 from elasticsearch_dsl import DocType
+from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
     JHTTPNotFound,
@@ -33,7 +34,7 @@ class BaseDocument(DocType):
 
     def to_dict(self, **kw):
         # XXX do I need to deal with kw?
-        d = super(BaseDocument, self).to_dict()
+        d = super(BaseDocument, self).to_dict(**kw)
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently :-(
@@ -55,11 +56,11 @@ class BaseDocument(DocType):
         return '_id'
 
     @classmethod
-    def get_item(cls, __raise_on_empty=True, **kw):
+    def get_item(cls, _raise_on_empty=True, **kw):
         """ Get single item and raise exception if not found.
 
         Exception raising when item is not found can be disabled
-        by passing ``__raise_on_empty=False`` in params.
+        by passing ``_raise_on_empty=False`` in params.
 
         :returns: Single collection item as an instance of ``cls``.
         """
@@ -68,33 +69,38 @@ class BaseDocument(DocType):
             **kw
             )
         if not result:
-            if __raise_on_empty:
+            if _raise_on_empty:
                 msg = "'%s(%s)' resource not found" % (cls.__name__, kw)
                 raise JHTTPNotFound(msg)
             return None
         return result[0]
 
     @classmethod
-    def _update_many(cls, items, params, request):
-        # XXX do in bulk
-        count = len(items)
-        for item in items:
-            item.update(params)
-        return count
+    def _update_many(cls, items, params, **kw):
+        if not items:
+            return
+
+        actions = [item.to_dict(include_meta=True) for item in items]
+        for action in actions:
+            action.pop('_source')
+            action['doc'] = params
+        client = items[0].connection
+        return _bulk(actions, client, op_type='update', **kw)
 
     @classmethod
-    def _delete_many(cls, items, request):
-        # XXX do in bulk
-        count = len(items)
-        for item in items:
-            item.delete()
-        return count
+    def _delete_many(cls, items, **kw):
+        if not items:
+            return
+
+        actions = [item.to_dict(include_meta=True) for item in items]
+        client = items[0].connection
+        return _bulk(actions, client, op_type='delete', **kw)
 
     @classmethod
     def get_collection(cls, _count=False, __strict=True, _sort=None,
-                       _fields=(), _limit=None, _page=None, _start=None,
+                       _fields=None, _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False,
-                       **params):
+                       _search_fields=None, q=None, **params):
         """ Query collection and return results.
 
         Notes:
@@ -109,10 +115,6 @@ class BaseDocument(DocType):
             only fields defined on model, exception is raised if invalid
             fields are present. When False - invalid fields are dropped.
             Defaults to ``True``.
-        :param bool _item_request: Indicates whether it is a single item
-            request or not. When True and DataError happens on DB request,
-            JHTTPNotFound is raised. JHTTPBadRequest is raised when False.
-            Defaults to ``False``.
         :param list _sort: Field names to sort results by. If field name
             is prefixed with "-" it is used for "descending" sorting.
             Otherwise "ascending" sorting is performed by that field.
@@ -133,16 +135,24 @@ class BaseDocument(DocType):
             to None. Params ``_page`` and ``_start`` are mutually
             exclusive. If not offset-related params are provided, offset
             equals to 0.
-        :param Query query_set: Existing queryset. If provided, all queries
+        :param Query _query_set: Existing queryset. If provided, all queries
             are applied to it instead of creating new queryset. Defaults
             to None.
+        :param bool _item_request: Indicates whether it is a single item
+            request or not. When True and DataError happens on DB request,
+            JHTTPNotFound is raised. JHTTPBadRequest is raised when False.
+            Defaults to ``False``.
         :param _count: When provided, only results number is returned as
             integer.
         :param _explain: When provided, query performed(SQL) is returned
             as a string instead of query results.
-        :param bool __raise_on_empty: When True JHTTPNotFound is raised
+        :param bool _raise_on_empty: When True JHTTPNotFound is raised
             if query returned no results. Defaults to False in which case
             error is just logged and empty query results are returned.
+        :param q: Query string to perform full-text search with.
+        :param _search_fields: Coma-separated list of field names to use
+            with full-text search(q param) to limit fields which are
+            searched.
 
         :returns: Query results as ``elasticsearch_dsl.XXX`` instance.
             May be sorted, offset, limited.
@@ -151,7 +161,7 @@ class BaseDocument(DocType):
         :returns: Number of query results as an int when ``_count`` param
             is provided.
 
-        :raises JHTTPNotFound: When ``__raise_on_empty=True`` and no
+        :raises JHTTPNotFound: When ``_raise_on_empty=True`` and no
             results found.
         :raises JHTTPNotFound: When ``_item_request=True`` and
             ``sqlalchemy.exc.DataError`` exception is raised during DB
@@ -170,39 +180,45 @@ class BaseDocument(DocType):
         # XXX should we support _explain?
         # XXX do we need special support for _item_request
 
-        q = cls.search()
+        search_obj = cls.search()
+
+        if q is not None:
+            query_kw = {'query': q}
+            if _search_fields is not None:
+                query_kw['fields'] = _search_fields.split(',')
+            search_obj = search_obj.query('query_string', **query_kw)
 
         if _limit is not None:
-            start, limit = process_limit(_start, _page, _limit)
-            q = q.extra(from_=start, size=limit)
+            _start, limit = process_limit(_start, _page, _limit)
+            search_obj = search_obj.extra(from_=_start, size=limit)
 
         if _fields:
             include, exclude = process_fields(_fields)
             if __strict:
-                _validate_fields(include + exclude)
+                _validate_fields(cls, include + exclude)
             # XXX partial fields support isn't yet released. for now
             # we just use fields, later we'll add support for excluded fields
-            q = q.fields(include)
+            search_obj = search_obj.fields(include)
 
         if params:
             params = _cleaned_query_params(cls, params, __strict)
             if params:
-                q = q.filter('term', **params)
+                search_obj = search_obj.filter('term', **params)
 
         if _count:
             # XXX use search_type = count? probably more efficient
-            return q.execute().hits.total
+            return search_obj.execute().hits.total
 
         if _sort:
-            fields = split_strip(_sort)
+            sort_fields = split_strip(_sort)
             if __strict:
                 _validate_fields(
                     cls,
-                    [f[1:] if f.startswith('-') else f for f in fields]
+                    [f[1:] if f.startswith('-') else f for f in sort_fields]
                     )
-            q = q.sort(*fields)
+            search_obj = search_obj.sort(*sort_fields)
 
-        hits = q.execute().hits
+        hits = search_obj.execute().hits
         hits._nefertari_meta = dict(
             total=hits.total,
             start=_start,
@@ -244,6 +260,32 @@ def _validate_fields(cls, field_names):
     names = frozenset(field_names)
     invalid_names = names.difference(valid_names)
     if invalid_names:
-         raise JHTTPBadRequest(
+        raise JHTTPBadRequest(
             "'%s' object does not have fields: %s" % (
             cls.__name__, ', '.join(invalid_names)))
+
+
+def _bulk(actions, client, op_type='index', request=None):
+    for action in actions:
+        action['_op_type'] = op_type
+
+    kwargs = {
+        'client': client,
+        'actions': actions,
+    }
+
+    if request is None:
+        query_params = {}
+    else:
+        query_params = request.params.mixed()
+    query_params = dictset(query_params)
+    # TODO: Use "elasticsearch.enable_refresh_query" setting here
+    refresh_enabled = False
+    if '_refresh_index' in query_params and refresh_enabled:
+        kwargs['refresh'] = query_params.asbool('_refresh_index')
+
+    executed_num, errors = helpers.bulk(**kwargs)
+    if errors:
+        raise Exception('Errors happened when executing Elasticsearch '
+                        'actions: {}'.format('; '.join(errors)))
+    return executed_num
