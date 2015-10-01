@@ -44,19 +44,25 @@ class TestBaseDocument(object):
     @patch('nefertari_es.documents._bulk')
     def test_update_many(self, mock_bulk, simple_model):
         item = simple_model(name='first', price=2)
-        simple_model._update_many([item], {'name': 'second'}, foo=1)
+        simple_model._update_many([item], {'name': 'second'})
         mock_bulk.assert_called_once_with(
             [{'doc': {'name': 'second'}, '_type': 'item'}],
-            item.connection, foo=1, op_type='update')
+            item.connection, op_type='update', request=None)
 
     @patch('nefertari_es.documents._bulk')
     def test_delete_many(self, mock_bulk, simple_model):
         item = simple_model(name='first', price=2)
-        simple_model._delete_many([item], foo=1)
+        simple_model._delete_many([item])
         mock_bulk.assert_called_once_with(
             [{'_type': 'item', '_source': {'price': 2, 'name': 'first'}}],
-            item.connection, foo=1, op_type='delete')
+            item.connection, op_type='delete', request=None)
 
+    def test_to_dict(self, simple_model):
+        item = simple_model(name='joe', price=42)
+        assert item.to_dict() == {'name': 'joe', 'price': 42}
+        assert item.to_dict(include_meta=True) == {
+            '_source': {'name': 'joe', 'price': 42}, '_type': 'item'
+            }
 
 class TestHelpers(object):
     @patch('nefertari_es.documents._validate_fields')

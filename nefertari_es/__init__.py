@@ -29,7 +29,6 @@ __all__ = [
     'setup_database',
     'get_document_cls',
     'get_document_classes',
-    'create_index',
     'is_relationship_field',
     ]
 

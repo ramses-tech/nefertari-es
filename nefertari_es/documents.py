@@ -32,12 +32,14 @@ class BaseDocument(DocType):
     def delete(self, request=None):
         super(BaseDocument, self).delete()
 
-    def to_dict(self, **kw):
-        # XXX do I need to deal with kw?
-        d = super(BaseDocument, self).to_dict(**kw)
+    def to_dict(self, include_meta=False, _keys=None, request=None):
+        d = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently :-(
+
+        # XXX ignoring _keys and request for now. not sure what
+        # nefertari expects about how we will use these parameters
 
         # disable these for now - figure out a way to only add them
         # when called by nefertari, not elasticsearch_dsl
@@ -76,7 +78,7 @@ class BaseDocument(DocType):
         return result[0]
 
     @classmethod
-    def _update_many(cls, items, params, **kw):
+    def _update_many(cls, items, params, request=None):
         if not items:
             return
 
@@ -85,16 +87,16 @@ class BaseDocument(DocType):
             action.pop('_source')
             action['doc'] = params
         client = items[0].connection
-        return _bulk(actions, client, op_type='update', **kw)
+        return _bulk(actions, client, op_type='update', request=request)
 
     @classmethod
-    def _delete_many(cls, items, **kw):
+    def _delete_many(cls, items, request=None):
         if not items:
             return
 
         actions = [item.to_dict(include_meta=True) for item in items]
         client = items[0].connection
-        return _bulk(actions, client, op_type='delete', **kw)
+        return _bulk(actions, client, op_type='delete', request=request)
 
     @classmethod
     def get_collection(cls, _count=False, __strict=True, _sort=None,
@@ -182,12 +184,6 @@ class BaseDocument(DocType):
 
         search_obj = cls.search()
 
-        if q is not None:
-            query_kw = {'query': q}
-            if _search_fields is not None:
-                query_kw['fields'] = _search_fields.split(',')
-            search_obj = search_obj.query('query_string', **query_kw)
-
         if _limit is not None:
             _start, limit = process_limit(_start, _page, _limit)
             search_obj = search_obj.extra(from_=_start, size=limit)
@@ -204,6 +200,12 @@ class BaseDocument(DocType):
             params = _cleaned_query_params(cls, params, __strict)
             if params:
                 search_obj = search_obj.filter('term', **params)
+
+        if q is not None:
+            query_kw = {'query': q}
+            if _search_fields is not None:
+                query_kw['fields'] = _search_fields.split(',')
+            search_obj = search_obj.query('query_string', **query_kw)
 
         if _count:
             # XXX use search_type = count? probably more efficient
