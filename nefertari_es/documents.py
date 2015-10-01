@@ -56,11 +56,11 @@ class BaseDocument(DocType):
         return '_id'
 
     @classmethod
-    def get_item(cls, __raise_on_empty=True, **kw):
+    def get_item(cls, _raise_on_empty=True, **kw):
         """ Get single item and raise exception if not found.
 
         Exception raising when item is not found can be disabled
-        by passing ``__raise_on_empty=False`` in params.
+        by passing ``_raise_on_empty=False`` in params.
 
         :returns: Single collection item as an instance of ``cls``.
         """
@@ -69,7 +69,7 @@ class BaseDocument(DocType):
             **kw
             )
         if not result:
-            if __raise_on_empty:
+            if _raise_on_empty:
                 msg = "'%s(%s)' resource not found" % (cls.__name__, kw)
                 raise JHTTPNotFound(msg)
             return None
@@ -98,7 +98,7 @@ class BaseDocument(DocType):
 
     @classmethod
     def get_collection(cls, _count=False, __strict=True, _sort=None,
-                       _fields=(), _limit=None, _page=None, _start=None,
+                       _fields=None, _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False,
                        _search_fields=None, q=None, **params):
         """ Query collection and return results.
@@ -146,7 +146,7 @@ class BaseDocument(DocType):
             integer.
         :param _explain: When provided, query performed(SQL) is returned
             as a string instead of query results.
-        :param bool __raise_on_empty: When True JHTTPNotFound is raised
+        :param bool _raise_on_empty: When True JHTTPNotFound is raised
             if query returned no results. Defaults to False in which case
             error is just logged and empty query results are returned.
         :param q: Query string to perform full-text search with.
@@ -161,7 +161,7 @@ class BaseDocument(DocType):
         :returns: Number of query results as an int when ``_count`` param
             is provided.
 
-        :raises JHTTPNotFound: When ``__raise_on_empty=True`` and no
+        :raises JHTTPNotFound: When ``_raise_on_empty=True`` and no
             results found.
         :raises JHTTPNotFound: When ``_item_request=True`` and
             ``sqlalchemy.exc.DataError`` exception is raised during DB
@@ -189,8 +189,8 @@ class BaseDocument(DocType):
             search_obj = search_obj.query('query_string', **query_kw)
 
         if _limit is not None:
-            start, limit = process_limit(_start, _page, _limit)
-            search_obj = search_obj.extra(from_=start, size=limit)
+            _start, limit = process_limit(_start, _page, _limit)
+            search_obj = search_obj.extra(from_=_start, size=limit)
 
         if _fields:
             include, exclude = process_fields(_fields)
@@ -210,13 +210,13 @@ class BaseDocument(DocType):
             return search_obj.execute().hits.total
 
         if _sort:
-            fields = split_strip(_sort)
+            sort_fields = split_strip(_sort)
             if __strict:
                 _validate_fields(
                     cls,
-                    [f[1:] if f.startswith('-') else f for f in fields]
+                    [f[1:] if f.startswith('-') else f for f in sort_fields]
                     )
-            search_obj = search_obj.sort(*fields)
+            search_obj = search_obj.sort(*sort_fields)
 
         hits = search_obj.execute().hits
         hits._nefertari_meta = dict(

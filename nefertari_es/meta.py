@@ -1,3 +1,4 @@
+from elasticsearch_dsl import Index
 from elasticsearch_dsl.document import DocTypeMeta
 
 # BaseDocument subclasses registry
@@ -15,7 +16,6 @@ def create_index(index_name, doc_classes=None):
         added to created index. Defaults to None, in which case all
         document classes from document registry are added to new index.
     """
-    from elasticsearch_dsl import Index
     index = Index(index_name)
 
     if doc_classes is None:
