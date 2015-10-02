@@ -29,6 +29,12 @@ DecimalField = field.Double
 
 
 class CustomMappingMixin(object):
+    """ Mixin that allows to define custom ES field mapping.
+
+    Set mapping to "_custom_mapping" attribute. Defaults to None, in
+    which case default field mapping is used. Custom mapping extends
+    default mapping.
+    """
     _custom_mapping = None
 
     def to_dict(self, *args, **kwargs):
