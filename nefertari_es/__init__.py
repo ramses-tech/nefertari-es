@@ -13,7 +13,7 @@ from .meta import (
 from .fields import (
     DateField,
     DateTimeField,
-    IntField,
+    IntegerField,
     StringField,
     TextField,
     )
@@ -23,7 +23,7 @@ __all__ = [
     'BaseDocument',
     'DateField',
     'DateTimeField',
-    'IntField',
+    'IntegerField',
     'StringField',
     'TextField',
     'setup_database',
