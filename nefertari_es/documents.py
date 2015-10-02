@@ -101,7 +101,7 @@ class BaseDocument(DocType):
     @classmethod
     def get_collection(cls, _count=False, __strict=True, _sort=None,
                        _fields=None, _limit=None, _page=None, _start=None,
-                       _query_set=None, _item_request=False,
+                       _query_set=None, _item_request=False, _explain=None,
                        _search_fields=None, q=None, **params):
         """ Query collection and return results.
 
@@ -179,7 +179,6 @@ class BaseDocument(DocType):
         """
 
         # XXX should we support query_set?
-        # XXX should we support _explain?
         # XXX do we need special support for _item_request
 
         search_obj = cls.search()
@@ -209,6 +208,9 @@ class BaseDocument(DocType):
 
         if _count:
             return search_obj.count()
+
+        if _explain:
+            return search_obj.to_dict()
 
         if _sort:
             sort_fields = split_strip(_sort)

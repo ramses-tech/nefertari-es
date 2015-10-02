@@ -13,5 +13,4 @@ def simple_model(request):
         price = Integer()
         connection = property(Mock())
 
-    Item.search = Mock()
     return Item

@@ -38,7 +38,7 @@ class CustomMappingMixin(object):
     _custom_mapping = None
 
     def to_dict(self, *args, **kwargs):
-        data = super(DictField, self).to_dict(*args, **kwargs)
+        data = super(CustomMappingMixin, self).to_dict(*args, **kwargs)
         if self._custom_mapping is not None:
             data.update(self._custom_mapping)
         return data
