@@ -208,8 +208,7 @@ class BaseDocument(DocType):
             search_obj = search_obj.query('query_string', **query_kw)
 
         if _count:
-            # XXX use search_type = count? probably more efficient
-            return search_obj.execute().hits.total
+            return search_obj.count()
 
         if _sort:
             sort_fields = split_strip(_sort)
