@@ -44,7 +44,7 @@ class TestDocumentRegistry(object):
     def test_registereddocumentmeta(self):
         from six import add_metaclass
 
-        @add_metaclass(meta.RegisteredDocumentMeta)
+        @add_metaclass(meta.RegisteredDocMeta)
         class MyItem123(object):
             pass
 

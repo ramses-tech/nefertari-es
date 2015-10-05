@@ -1,5 +1,7 @@
-from elasticsearch_dsl import Index
+from elasticsearch_dsl import Index, field
 from elasticsearch_dsl.document import DocTypeMeta
+
+from nefertari_es.fields import IdField
 
 # BaseDocument subclasses registry
 # maps class names to classes
@@ -42,12 +44,12 @@ def get_document_classes():
     return _document_registry.copy()
 
 
-class RegisteredDocumentMeta(DocTypeMeta):
+class RegisteredDocMeta(DocTypeMeta):
     """ Metaclass that registers defined doctypes in
     ``_document_registry``.
     """
     def __new__(cls, name, bases, attrs):
-        new_class = super(RegisteredDocumentMeta, cls).__new__(
+        new_class = super(RegisteredDocMeta, cls).__new__(
             cls, name, bases, attrs)
         _document_registry[new_class.__name__] = new_class
         return new_class

@@ -13,7 +13,7 @@ class TestBaseDocument(object):
 
     def test_pk_field(self, simple_model):
         field = simple_model._doc_type.mapping['name']
-        field.primary_key = True
+        field._primary_key = True
         assert simple_model.pk_field() == 'name'
 
     def test_pk_field_default(self, simple_model):
@@ -111,15 +111,16 @@ class TestHelpers(object):
         assert result == 5
 
 
+@patch('nefertari_es.documents.BaseDocument.search')
 class TestGetCollection(object):
 
-    def test_q_search_fields_params(self, simple_model):
+    def test_q_search_fields_params(self, mock_search, simple_model):
         result = simple_model.get_collection(
             q='foo', _search_fields='name')
-        simple_model.search.assert_called_once_with()
-        simple_model.search().query.assert_called_once_with(
+        mock_search.assert_called_once_with()
+        mock_search().query.assert_called_once_with(
             'query_string', query='foo', fields=['name'])
-        assert result == simple_model.search().query().execute().hits
+        assert result == mock_search().query().execute().hits
         assert result._nefertari_meta == {
             'total': result.total,
             'start': None,
@@ -127,14 +128,14 @@ class TestGetCollection(object):
         }
 
     @patch('nefertari_es.documents.process_limit')
-    def test_limit_param(self, mock_proc, simple_model):
+    def test_limit_param(self, mock_proc, mock_search, simple_model):
         mock_proc.return_value = (1, 2)
         result = simple_model.get_collection(_limit=20)
         mock_proc.assert_called_once_with(None, None, 20)
-        simple_model.search.assert_called_once_with()
-        simple_model.search().extra.assert_called_once_with(
+        mock_search.assert_called_once_with()
+        mock_search().extra.assert_called_once_with(
             from_=1, size=2)
-        assert result == simple_model.search().extra().execute().hits
+        assert result == mock_search().extra().execute().hits
         assert result._nefertari_meta == {
             'total': result.total,
             'start': 1,
@@ -143,14 +144,15 @@ class TestGetCollection(object):
 
     @patch('nefertari_es.documents._validate_fields')
     @patch('nefertari_es.documents.process_fields')
-    def test_fields_strict_param(self, mock_proc, mock_val, simple_model):
+    def test_fields_strict_param(
+            self, mock_proc, mock_val, mock_search, simple_model):
         mock_proc.return_value = (['name'], ['price'])
         result = simple_model.get_collection(_fields='name,-price')
         mock_proc.assert_called_once_with('name,-price')
         mock_val.assert_called_once_with(simple_model, ['name', 'price'])
-        simple_model.search.assert_called_once_with()
-        simple_model.search().fields.assert_called_once_with(['name'])
-        assert result == simple_model.search().fields().execute().hits
+        mock_search.assert_called_once_with()
+        mock_search().fields.assert_called_once_with(['name'])
+        assert result == mock_search().fields().execute().hits
         assert result._nefertari_meta == {
             'total': result.total,
             'start': None,
@@ -158,26 +160,31 @@ class TestGetCollection(object):
         }
 
     @patch('nefertari_es.documents._cleaned_query_params')
-    def test_params_param(self, mock_clean, simple_model):
+    def test_params_param(self, mock_clean, mock_search, simple_model):
         mock_clean.return_value = {'foo': 1}
         result = simple_model.get_collection(foo=2)
         mock_clean.assert_called_once_with(
             simple_model, {'foo': 2}, True)
-        simple_model.search.assert_called_once_with()
-        simple_model.search().filter.assert_called_once_with(
+        mock_search.assert_called_once_with()
+        mock_search().filter.assert_called_once_with(
             'term', foo=1)
-        assert result == simple_model.search().filter().execute().hits
+        assert result == mock_search().filter().execute().hits
 
-    def test_count_param(self, simple_model):
+    def test_count_param(self, mock_search, simple_model):
         result = simple_model.get_collection(_count=True)
-        simple_model.search.assert_called_once_with()
-        assert result == simple_model.search().execute().hits.total
+        mock_search.assert_called_once_with()
+        assert result == mock_search().count()
+
+    def test_explain_param(self, mock_search, simple_model):
+        result = simple_model.get_collection(q='foo', _explain=True)
+        mock_search.assert_called_once_with()
+        assert result == mock_search().query().to_dict()
 
     @patch('nefertari_es.documents._validate_fields')
-    def test_sort_strict_param(self, mock_val, simple_model):
+    def test_sort_strict_param(self, mock_val, mock_search, simple_model):
         result = simple_model.get_collection(_sort='name,-price')
         mock_val.assert_called_once_with(simple_model, ['name', 'price'])
-        simple_model.search.assert_called_once_with()
-        simple_model.search().sort.assert_called_once_with(
+        mock_search.assert_called_once_with()
+        mock_search().sort.assert_called_once_with(
             'name', '-price')
-        assert result == simple_model.search().sort().execute().hits
+        assert result == mock_search().sort().execute().hits

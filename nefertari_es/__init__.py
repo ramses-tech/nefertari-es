@@ -1,10 +1,10 @@
 from elasticsearch_dsl.connections import connections
-from elasticsearch_dsl.serializer import serializer
 from nefertari.utils import (
     dictset,
     split_strip,
     )
 from .documents import BaseDocument
+from .serializers import JSONSerializer
 from .meta import (
     get_document_cls,
     get_document_classes,
@@ -13,7 +13,7 @@ from .meta import (
 from .fields import (
     DateField,
     DateTimeField,
-    IntField,
+    IntegerField,
     StringField,
     TextField,
     )
@@ -23,7 +23,7 @@ __all__ = [
     'BaseDocument',
     'DateField',
     'DateTimeField',
-    'IntField',
+    'IntegerField',
     'StringField',
     'TextField',
     'setup_database',
@@ -55,7 +55,8 @@ def setup_database(config):
     # lots of repeated code, plus other engines shouldn't have to know
     # about es - they should just know how to serialize their
     # documents to JSON.
-    conn = connections.create_connection(serializer=serializer, **params)
+    conn = connections.create_connection(
+        serializer=JSONSerializer(), **params)
     setup_index(conn, settings)
 
 

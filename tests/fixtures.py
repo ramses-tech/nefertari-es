@@ -1,17 +1,16 @@
 import pytest
 from mock import Mock
-from elasticsearch_dsl import String, Integer
 
 from nefertari_es.documents import BaseDocument
+from nefertari_es.fields import StringField, IntegerField
 
 
 @pytest.fixture
 def simple_model(request):
 
     class Item(BaseDocument):
-        name = String()
-        price = Integer()
+        name = StringField()
+        price = IntegerField()
         connection = property(Mock())
 
-    Item.search = Mock()
     return Item
