@@ -4,21 +4,6 @@ from dateutil import parser
 from elasticsearch_dsl import field
 from elasticsearch_dsl.exceptions import ValidationException
 
-IntegerField = field.Integer
-IntervalField = field.Integer
-SmallIntegerField = field.Integer
-
-StringField = field.String
-TextField = field.String
-UnicodeField = field.String
-UnicodeTextField = field.String
-
-BigIntegerField = field.Long
-BooleanField = field.Boolean
-FloatField = field.Float
-BinaryField = field.Byte
-DecimalField = field.Double
-
 # ChoiceField
 # PickleField
 # TimeField
@@ -44,12 +29,42 @@ class CustomMappingMixin(object):
         return data
 
 
-class DictField(CustomMappingMixin, field.Object):
+class BaseFieldMixin(object):
+    def __init__(self, *args, **kwargs):
+        self._primary_key = kwargs.pop('primary_key', False)
+        super(BaseFieldMixin, self).__init__(*args, **kwargs)
+
+
+class IdField(CustomMappingMixin, field.String):
+    name = 'idfield'
+    _custom_mapping = {'type': 'string'}
+
+    # TODO: Mirror document.meta['_id'] value
+
+    def _empty(self):
+        return None
+
+
+class IntervalField(BaseFieldMixin, field.Integer):
+    """ Custom field that stores `datetime.timedelta` instances.
+
+    Values are stored as seconds in ES and loaded by
+    `datetime.timedelta(seconds=<value>) when restoring from ES.
+    """
+    _coerce = True
+
+    def _to_python(self, data):
+        if isinstance(data, int):
+            return datetime.timedelta(seconds=data)
+        return super(IntervalField, self)._to_python(data)
+
+
+class DictField(CustomMappingMixin, BaseFieldMixin, field.Object):
     name = 'dict'
     _custom_mapping = {'type': 'object', 'enabled': False}
 
 
-class DateTimeField(CustomMappingMixin, field.Field):
+class DateTimeField(CustomMappingMixin, BaseFieldMixin, field.Field):
     name = 'datetime'
     _coerce = True
     _custom_mapping = {'type': 'date', 'format': 'dateOptionalTime'}
@@ -66,11 +81,11 @@ class DateTimeField(CustomMappingMixin, field.Field):
                 'Could not parse datetime from the value (%r)' % data, e)
 
 
-class DateField(CustomMappingMixin, field.Date):
+class DateField(CustomMappingMixin, BaseFieldMixin, field.Date):
     _custom_mapping = {'type': 'date', 'format': 'dateOptionalTime'}
 
 
-class TimeField(CustomMappingMixin, field.Field):
+class TimeField(CustomMappingMixin, BaseFieldMixin, field.Field):
     name = 'time'
     _coerce = True
     _custom_mapping = {'type': 'date', 'format': 'HH:mm:ss'}
@@ -87,3 +102,47 @@ class TimeField(CustomMappingMixin, field.Field):
         except Exception as e:
             raise ValidationException(
                 'Could not parse time from the value (%r)' % data, e)
+
+
+class IntegerField(BaseFieldMixin, field.Integer):
+    pass
+
+
+class SmallIntegerField(BaseFieldMixin, field.Integer):
+    pass
+
+
+class StringField(BaseFieldMixin, field.String):
+    pass
+
+
+class TextField(BaseFieldMixin, field.String):
+    pass
+
+
+class UnicodeField(BaseFieldMixin, field.String):
+    pass
+
+
+class UnicodeTextField(BaseFieldMixin, field.String):
+    pass
+
+
+class BigIntegerField(BaseFieldMixin, field.Long):
+    pass
+
+
+class BooleanField(BaseFieldMixin, field.Boolean):
+    pass
+
+
+class FloatField(BaseFieldMixin, field.Float):
+    pass
+
+
+class BinaryField(BaseFieldMixin, field.Byte):
+    pass
+
+
+class DecimalField(BaseFieldMixin, field.Double):
+    pass

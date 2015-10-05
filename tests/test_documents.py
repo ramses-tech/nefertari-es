@@ -13,7 +13,7 @@ class TestBaseDocument(object):
 
     def test_pk_field(self, simple_model):
         field = simple_model._doc_type.mapping['name']
-        field.primary_key = True
+        field._primary_key = True
         assert simple_model.pk_field() == 'name'
 
     def test_pk_field_default(self, simple_model):

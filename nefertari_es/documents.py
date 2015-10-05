@@ -15,10 +15,10 @@ from nefertari.utils import (
     drop_reserved_params,
     split_strip,
     )
-from .meta import RegisteredDocumentMeta
+from .meta import RegisteredDocMeta
 
 
-@add_metaclass(RegisteredDocumentMeta)
+@add_metaclass(RegisteredDocMeta)
 class BaseDocument(DocType):
 
     def save(self, request=None):
@@ -52,7 +52,7 @@ class BaseDocument(DocType):
     def pk_field(cls):
         for name in cls._doc_type.mapping:
             field = cls._doc_type.mapping[name]
-            if getattr(field, 'primary_key', False):
+            if getattr(field, '_primary_key', False):
                 return name
         # XXX default to _id?
         return '_id'
@@ -99,7 +99,7 @@ class BaseDocument(DocType):
         return _bulk(actions, client, op_type='delete', request=request)
 
     @classmethod
-    def get_collection(cls, _count=False, __strict=True, _sort=None,
+    def get_collection(cls, _count=False, _strict=True, _sort=None,
                        _fields=None, _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False, _explain=None,
                        _search_fields=None, q=None, **params):
@@ -113,7 +113,7 @@ class BaseDocument(DocType):
         *   When ``_count`` param is used, objects count is returned
             before applying offset and limit.
 
-        :param bool __strict: If True ``params`` are validated to contain
+        :param bool _strict: If True ``params`` are validated to contain
             only fields defined on model, exception is raised if invalid
             fields are present. When False - invalid fields are dropped.
             Defaults to ``True``.
@@ -189,14 +189,14 @@ class BaseDocument(DocType):
 
         if _fields:
             include, exclude = process_fields(_fields)
-            if __strict:
+            if _strict:
                 _validate_fields(cls, include + exclude)
             # XXX partial fields support isn't yet released. for now
             # we just use fields, later we'll add support for excluded fields
             search_obj = search_obj.fields(include)
 
         if params:
-            params = _cleaned_query_params(cls, params, __strict)
+            params = _cleaned_query_params(cls, params, _strict)
             if params:
                 search_obj = search_obj.filter('term', **params)
 
@@ -214,7 +214,7 @@ class BaseDocument(DocType):
 
         if _sort:
             sort_fields = split_strip(_sort)
-            if __strict:
+            if _strict:
                 _validate_fields(
                     cls,
                     [f[1:] if f.startswith('-') else f for f in sort_fields]
