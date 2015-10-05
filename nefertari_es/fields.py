@@ -40,6 +40,7 @@ class IdField(CustomMappingMixin, field.String):
     _custom_mapping = {'type': 'string'}
 
     # TODO: Mirror document.meta['_id'] value
+    # TODO: Allow querying by IdField
 
     def _empty(self):
         return None

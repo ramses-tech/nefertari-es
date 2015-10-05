@@ -15,10 +15,10 @@ from nefertari.utils import (
     drop_reserved_params,
     split_strip,
     )
-from .meta import RegisteredDocMeta
+from .meta import IdentifiedDocMeta
 
 
-@add_metaclass(RegisteredDocMeta)
+@add_metaclass(IdentifiedDocMeta)
 class BaseDocument(DocType):
 
     def save(self, request=None):

@@ -53,3 +53,20 @@ class RegisteredDocMeta(DocTypeMeta):
             cls, name, bases, attrs)
         _document_registry[new_class.__name__] = new_class
         return new_class
+
+
+class IdentifiedDocMeta(RegisteredDocMeta):
+    """ Metaclass that adds IdField named "id" to document class
+    if IdField or primary key field is not already present.
+    """
+    def __new__(cls, name, bases, attrs):
+        for attr, val in attrs.items():
+            if isinstance(val, IdField):
+                break
+            if isinstance(val, field.Field) and val._primary_key:
+                break
+        else:
+            attrs['id'] = IdField()
+
+        return super(IdentifiedDocMeta, cls).__new__(
+            cls, name, bases, attrs)
