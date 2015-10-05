@@ -6,7 +6,7 @@ from elasticsearch_dsl.exceptions import ValidationException
 from nefertari_es import fields
 
 
-class TestFielfHelpers(object):
+class TestFieldHelpers(object):
 
     def test_custom_mapping_mixin(self):
         class DummyBase(object):
