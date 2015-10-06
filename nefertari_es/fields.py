@@ -147,3 +147,24 @@ class BinaryField(BaseFieldMixin, field.Byte):
 
 class DecimalField(BaseFieldMixin, field.Double):
     pass
+
+
+class Relationship(BaseFieldMixin, field.String):
+    # XXX deal with backrefs
+    # XXX deal with updating, deleting rules
+    # XXX deal with bulk fetching of related objects
+    # XXX for now we assume the same index
+    # XXX support for setting from objects, rather than ids?
+
+    # internally data is either a `_id` or a list of them.
+    _coerce = True
+
+    def __init__(self, document_type, uselist=True, *args, **kw):
+        self._multi = uselist
+        self._document_type = document_type
+        super(Relationship, self).__init__(*args, **kw)
+
+    def _to_python(self, data):
+        from .meta import get_document_cls
+        cls = get_document_cls(self._document_type)
+        return cls.get(data)

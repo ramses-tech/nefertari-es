@@ -16,6 +16,7 @@ from .fields import (
     IntegerField,
     StringField,
     TextField,
+    Relationship,
     )
 
 
@@ -26,6 +27,7 @@ __all__ = [
     'IntegerField',
     'StringField',
     'TextField',
+    'Relationship',
     'setup_database',
     'get_document_cls',
     'get_document_classes',
