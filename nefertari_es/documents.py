@@ -3,6 +3,7 @@ from six import (
     string_types,
     )
 from elasticsearch_dsl import DocType
+from elasticsearch_dsl.utils import AttrList
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
@@ -16,12 +17,22 @@ from nefertari.utils import (
     split_strip,
     )
 from .meta import RegisteredDocMeta
+from .fields import ReferenceField
 
 
 @add_metaclass(RegisteredDocMeta)
 class BaseDocument(DocType):
 
+    _nested_relationships = ()
+
+    # XXX implement auth and public fields?
+    _auth_fields = None
+    _public_fields = None
+
     def save(self, request=None):
+        # XXX need to go through relationship instances and save them
+        # first, so that changes aren't lost, and so that fresh
+        # instances get ids
         super(BaseDocument, self).save()
         return self
 
@@ -36,17 +47,48 @@ class BaseDocument(DocType):
         d = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
         # XXX DocType and nefertari both expect a to_dict method, but
-        # they expect it to act differently :-(
+        # they expect it to act differently. DocType uses to_dict for
+        # serialize for saving to es. nefertari uses it to serialize
+        # for serving JSON to the client. For now we differentiate by
+        # looking for a request argument. If it's present we assume
+        # that we're serving JSON to the client, otherwise we assume
+        # that we're saving to es
 
-        # XXX ignoring _keys and request for now. not sure what
-        # nefertari expects about how we will use these parameters
+        if request is not None:
+            # add some nefertari metadata
+            d['_type'] = self._doc_type.name
+            d['_pk'] = str(getattr(self, self.pk_field()))
 
-        # disable these for now - figure out a way to only add them
-        # when called by nefertari, not elasticsearch_dsl
-        #d['_type'] = self._doc_type.name
-        #d['_pk'] = str(getattr(self, self.pk_field()))
-
+        # replace referenced instances with their ids when saving to
+        # es
+        for name in self._relationships():
+            if request is not None and name in self._nested_relationships:
+                # if we're serving JSON and nesting this field, then
+                # don't replace it with its id
+                continue
+            if include_meta:
+                loc = d['_source']
+            else:
+                loc = d
+            if name in loc:
+                inst = getattr(self, name)
+                if isinstance(inst, (list, AttrList)):
+                    loc[name] = [i._id for i in inst]
+                else:
+                    loc[name] = inst._id
         return d
+
+    def _relationships(self):
+        return [
+            name for name in self._doc_type.mapping
+            if isinstance(self._doc_type.mapping[name], ReferenceField)
+            ]
+
+    @classmethod
+    def from_es(cls, hit):
+        inst = DocType.from_es(hit)
+        # XXX fetch relationship objects and add them to the instance
+        return inst
 
     @classmethod
     def pk_field(cls):
