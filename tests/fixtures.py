@@ -11,12 +11,10 @@ from nefertari_es.fields import (
 
 @pytest.fixture
 def simple_model(request):
-
     class Item(BaseDocument):
         name = StringField()
         price = IntegerField()
         connection = property(Mock())
-
     return Item
 
 

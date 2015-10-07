@@ -63,7 +63,8 @@ class IdentifiedDocMeta(RegisteredDocMeta):
         for attr, val in attrs.items():
             if isinstance(val, IdField):
                 break
-            if isinstance(val, field.Field) and val._primary_key:
+            if (isinstance(val, field.Field) and
+                    getattr(val, '_primary_key', None)):
                 break
         else:
             attrs['id'] = IdField()

@@ -23,11 +23,15 @@ from .fields import ReferenceField
 @add_metaclass(IdentifiedDocMeta)
 class BaseDocument(DocType):
 
+    _public_fields = None
+    _auth_fields = None
+    _hidden_fields = None
     _nested_relationships = ()
 
-    # XXX implement auth and public fields?
-    _auth_fields = None
-    _public_fields = None
+    def __getattr__(self, name):
+        if name == '_id' and 'id' not in self.meta:
+            return
+        return super(BaseDocument, self).__getattr__(name)
 
     def save(self, request=None):
         # XXX need to go through relationship instances and save them
@@ -96,7 +100,6 @@ class BaseDocument(DocType):
             field = cls._doc_type.mapping[name]
             if getattr(field, '_primary_key', False):
                 return name
-        # XXX default to _id?
         return '_id'
 
     @classmethod
@@ -276,6 +279,9 @@ class BaseDocument(DocType):
         # XXX - seems to be used to provide field init kw args
         return None
 
+    @classmethod
+    def fields_to_query(cls):
+        return set(cls._doc_type.mapping).union({'_id'})
 
 
 def _cleaned_query_params(cls, params, strict):
@@ -291,7 +297,7 @@ def _cleaned_query_params(cls, params, strict):
     if strict:
         _validate_fields(cls, params.keys())
     else:
-        field_names = frozenset(cls._doc_type.mapping)
+        field_names = frozenset(cls.fields_to_query())
         param_names = frozenset(params.keys())
         invalid_params = param_names.difference(field_names)
         for key in invalid_params:
@@ -301,7 +307,7 @@ def _cleaned_query_params(cls, params, strict):
 
 
 def _validate_fields(cls, field_names):
-    valid_names = frozenset(cls._doc_type.mapping)
+    valid_names = frozenset(cls.fields_to_query())
     names = frozenset(field_names)
     invalid_names = names.difference(valid_names)
     if invalid_names:

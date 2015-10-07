@@ -39,15 +39,18 @@ class BaseFieldMixin(object):
         super(BaseFieldMixin, self).__init__(*args, **kwargs)
 
 
-class IdField(CustomMappingMixin, field.String):
-    name = 'idfield'
-    _custom_mapping = {'type': 'string'}
+class IdField(object):
+    """ Descriptor that returns value of document.meta['_id'].
 
-    # TODO: Mirror document.meta['_id'] value
-    # TODO: Allow querying by IdField
+    Because it's not an instance of ``field.Field``, it doesn't
+    create field in ES mapping and doesn't allow values set.
+    """
+    def __get__(self, obj, type=None):
+        if hasattr(obj, 'meta') and '_id' in obj.meta:
+            return obj.meta['_id']
 
-    def _empty(self):
-        return None
+    def __set__(self, obj, value):
+        raise AttributeError("Can't set read-only attribute.")
 
 
 class IntervalField(BaseFieldMixin, field.Integer):
