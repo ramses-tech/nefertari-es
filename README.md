@@ -24,4 +24,9 @@ Some issues to get basic engine working
   an unexpected keyword argument '_keys'`. need to track down where this
   is happening.
 
+- make IdField actually work in terms of fetching the document's
+  `_id`. Not sure if this field should allow setting or if it should
+  be read-only.
+
+
 Later move all es search from other engines and nefertari to this package.

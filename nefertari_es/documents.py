@@ -16,17 +16,30 @@ from nefertari.utils import (
     drop_reserved_params,
     split_strip,
     )
-from .meta import IdentifiedDocMeta
+from .meta import RegisteredDocMeta
 from .fields import ReferenceField
 
 
-@add_metaclass(IdentifiedDocMeta)
+@add_metaclass(RegisteredDocMeta)
 class BaseDocument(DocType):
 
     _public_fields = None
     _auth_fields = None
     _hidden_fields = None
     _nested_relationships = ()
+
+    def __init__(self, *args, **kwargs):
+        super(BaseDocument, self).__init__(*args, **kwargs)
+        self._sync_pk_field()
+
+    def _sync_pk_field(self):
+        """ Copy meta["_id"] to primary key field. """
+        # TODO: Only copy if field is IdField
+        # If field is other field but PK - copy from that field to meta
+        # before saving
+        pk_field = self.pk_field()
+        if not getattr(self, pk_field, None) and self._id:
+            setattr(self, pk_field, self._id)
 
     def __getattr__(self, name):
         if name == '_id' and 'id' not in self.meta:
@@ -38,6 +51,7 @@ class BaseDocument(DocType):
         # first, so that changes aren't lost, and so that fresh
         # instances get ids
         super(BaseDocument, self).save()
+        self._sync_pk_field()
         return self
 
     def update(self, params, request=None):
@@ -90,7 +104,7 @@ class BaseDocument(DocType):
 
     @classmethod
     def from_es(cls, hit):
-        inst = DocType.from_es(hit)
+        inst = super(BaseDocument, cls).from_es(hit)
         # XXX fetch relationship objects and add them to the instance
         return inst
 
@@ -100,7 +114,8 @@ class BaseDocument(DocType):
             field = cls._doc_type.mapping[name]
             if getattr(field, '_primary_key', False):
                 return name
-        return '_id'
+        else:
+            raise AttributeError('No primary key field')
 
     @classmethod
     def get_item(cls, _raise_on_empty=True, **kw):
@@ -222,9 +237,12 @@ class BaseDocument(DocType):
             or ``sqlalchemy.exc.IntegrityError`` errors happen during DB
             query.
         """
-
         # XXX should we support query_set?
         # XXX do we need special support for _item_request
+
+        pk_field = cls.pk_field()
+        if pk_field in params:
+            params['_id'] = params.pop(pk_field)
 
         search_obj = cls.search()
 

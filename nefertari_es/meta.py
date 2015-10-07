@@ -57,12 +57,10 @@ class RegisteredDocMeta(DocTypeMeta):
 
 class IdentifiedDocMeta(RegisteredDocMeta):
     """ Metaclass that adds IdField named "id" to document class
-    if IdField or primary key field is not already present.
+    if primary key field is not already present.
     """
     def __new__(cls, name, bases, attrs):
         for attr, val in attrs.items():
-            if isinstance(val, IdField):
-                break
             if (isinstance(val, field.Field) and
                     getattr(val, '_primary_key', None)):
                 break
