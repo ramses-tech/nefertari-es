@@ -36,6 +36,8 @@ class CustomMappingMixin(object):
 class BaseFieldMixin(object):
     def __init__(self, *args, **kwargs):
         self._primary_key = kwargs.pop('primary_key', False)
+        if self._primary_key:
+            kwargs['required'] = True
         super(BaseFieldMixin, self).__init__(*args, **kwargs)
 
 
