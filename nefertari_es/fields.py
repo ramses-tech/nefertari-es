@@ -1,8 +1,12 @@
 import datetime
 from dateutil import parser
 
-from elasticsearch_dsl import field
+from elasticsearch_dsl import (
+    field,
+    DocType,
+    )
 from elasticsearch_dsl.exceptions import ValidationException
+from elasticsearch_dsl.utils import AttrList
 
 # ChoiceField
 # PickleField
@@ -149,22 +153,25 @@ class DecimalField(BaseFieldMixin, field.Double):
     pass
 
 
-class Relationship(BaseFieldMixin, field.String):
+class ReferenceField(CustomMappingMixin, field.Nested):
+
+    _custom_mapping = {'type': 'string'}
+
+    @property
+    def _doc_class(self):
+        from .meta import get_document_cls
+        return get_document_cls(self._doc_class_name)
+
+    @_doc_class.setter
+    def _doc_class(self, name):
+        self._doc_class_name = name
+
+
+def Relationship(document_type, uselist=False, nested=True, *args, **kw):
     # XXX deal with backrefs
     # XXX deal with updating, deleting rules
-    # XXX deal with bulk fetching of related objects
-    # XXX for now we assume the same index
-    # XXX support for setting from objects, rather than ids?
 
-    # internally data is either a `_id` or a list of them.
-    _coerce = True
-
-    def __init__(self, document_type, uselist=True, *args, **kw):
-        self._multi = uselist
-        self._document_type = document_type
-        super(Relationship, self).__init__(*args, **kw)
-
-    def _to_python(self, data):
-        from .meta import get_document_cls
-        cls = get_document_cls(self._document_type)
-        return cls.get(data)
+    return ReferenceField(
+        multi=uselist,
+        doc_class=document_type
+        )

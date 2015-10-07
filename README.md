@@ -13,11 +13,16 @@ Some issues to get basic engine working
   working fine currently, but there may be some reason to actually set
   the `_id` to that same value as the pk field is using.
 
-- implement relationship fields. current plan is to do the joins
-  manually the same way that the mongo engine does. but instead of
-  storing an dbref, we'll store a tuple of index, document, _id. Also
-  we need to implement nesting for fields listed in
-  `_nested_relationships`.
+- finish implementing relationship fields. need to make related
+  objects get fetched from es when loading instances that have
+  related object. probably should be done in `from_es`. Also there are
+  many other details of relationships that need implementing:
+  delete/update triggers, saving related objects when saving an
+  instance that has related objects, back refs.
+
+- currently GET a collection from the web gives: `to_dict() got
+  an unexpected keyword argument '_keys'`. need to track down where this
+  is happening.
 
 - make IdField actually work in terms of fetching the document's
   `_id`. Not sure if this field should allow setting or if it should
