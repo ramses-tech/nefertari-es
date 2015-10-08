@@ -51,6 +51,9 @@ class IdField(CustomMappingMixin, BaseFieldMixin, field.String):
         super(IdField, self).__init__(*args, **kwargs)
         self._required = False
 
+    def _empty(self):
+        return None
+
 
 class IntervalField(BaseFieldMixin, field.Integer):
     """ Custom field that stores `datetime.timedelta` instances.
@@ -169,7 +172,7 @@ class ReferenceField(CustomMappingMixin, field.Nested):
         self._doc_class_name = name
 
 
-def Relationship(document_type, uselist=False, nested=True, *args, **kw):
+def Relationship(document_type, uselist=True, nested=True, *args, **kw):
     # XXX deal with backrefs
     # XXX deal with updating, deleting rules
 

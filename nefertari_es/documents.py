@@ -44,15 +44,28 @@ class BaseDocument(DocType):
             return
         return super(BaseDocument, self).__getattr__(name)
 
+    @classmethod
+    def _save_relationships(cls, data):
+        """ Go through relationship instances and save them, so that
+        changes aren't lost, and so that fresh instances get ids
+        """
+        for field in cls._relationships():
+            if field not in data:
+                continue
+            value = data[field]
+            if isinstance(value, (list, AttrList)):
+                return [obj.save() for obj in value]
+            else:
+                value.save()
+
     def save(self, request=None):
-        # XXX need to go through relationship instances and save them
-        # first, so that changes aren't lost, and so that fresh
-        # instances get ids
+        self._save_relationships(self._d_)
         super(BaseDocument, self).save()
         self._sync_id_field()
         return self
 
     def update(self, params, request=None):
+        self._save_relationships(params)
         super(BaseDocument, self).update(**params)
         return self
 
@@ -94,10 +107,11 @@ class BaseDocument(DocType):
                     loc[name] = inst._id
         return d
 
-    def _relationships(self):
+    @classmethod
+    def _relationships(cls):
         return [
-            name for name in self._doc_type.mapping
-            if isinstance(self._doc_type.mapping[name], ReferenceField)
+            name for name in cls._doc_type.mapping
+            if isinstance(cls._doc_type.mapping[name], ReferenceField)
             ]
 
     @classmethod
@@ -142,6 +156,7 @@ class BaseDocument(DocType):
 
     @classmethod
     def _update_many(cls, items, params, request=None):
+        cls._save_relationships(params)
         if not items:
             return
 
