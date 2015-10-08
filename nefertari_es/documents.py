@@ -17,7 +17,7 @@ from nefertari.utils import (
     split_strip,
     )
 from .meta import RegisteredDocMeta
-from .fields import ReferenceField
+from .fields import ReferenceField, IdField
 
 
 @add_metaclass(RegisteredDocMeta)
@@ -30,16 +30,14 @@ class BaseDocument(DocType):
 
     def __init__(self, *args, **kwargs):
         super(BaseDocument, self).__init__(*args, **kwargs)
-        self._sync_pk_field()
+        self._sync_id_field()
 
-    def _sync_pk_field(self):
-        """ Copy meta["_id"] to primary key field. """
-        # TODO: Only copy if field is IdField
-        # If field is other field but PK - copy from that field to meta
-        # before saving
-        pk_field = self.pk_field()
-        if not getattr(self, pk_field, None) and self._id:
-            setattr(self, pk_field, self._id)
+    def _sync_id_field(self):
+        """ Copy meta["_id"] to IdField. """
+        if self.pk_field_type() is IdField:
+            pk_field = self.pk_field()
+            if not getattr(self, pk_field, None) and self._id:
+                setattr(self, pk_field, str(self._id))
 
     def __getattr__(self, name):
         if name == '_id' and 'id' not in self.meta:
@@ -51,7 +49,7 @@ class BaseDocument(DocType):
         # first, so that changes aren't lost, and so that fresh
         # instances get ids
         super(BaseDocument, self).save()
-        self._sync_pk_field()
+        self._sync_id_field()
         return self
 
     def update(self, params, request=None):
@@ -116,6 +114,11 @@ class BaseDocument(DocType):
                 return name
         else:
             raise AttributeError('No primary key field')
+
+    @classmethod
+    def pk_field_type(cls):
+        pk_field = cls.pk_field()
+        return cls._doc_type.mapping[pk_field].__class__
 
     @classmethod
     def get_item(cls, _raise_on_empty=True, **kw):
@@ -239,11 +242,6 @@ class BaseDocument(DocType):
         """
         # XXX should we support query_set?
         # XXX do we need special support for _item_request
-
-        pk_field = cls.pk_field()
-        if pk_field in params:
-            params['_id'] = params.pop(pk_field)
-
         search_obj = cls.search()
 
         if _limit is not None:
@@ -259,6 +257,9 @@ class BaseDocument(DocType):
             search_obj = search_obj.fields(include)
 
         if params:
+            pk_field = cls.pk_field()
+            if pk_field in params:
+                params['_id'] = params.pop(pk_field)
             params = _cleaned_query_params(cls, params, _strict)
             if params:
                 search_obj = search_obj.filter('term', **params)
