@@ -66,6 +66,7 @@ class BaseDocument(DocType):
 
     def update(self, params, request=None):
         self._save_relationships(params)
+        params = self._flatten_relationships(params)
         super(BaseDocument, self).update(**params)
         return self
 
@@ -73,7 +74,7 @@ class BaseDocument(DocType):
         super(BaseDocument, self).delete()
 
     def to_dict(self, include_meta=False, _keys=None, request=None):
-        d = super(BaseDocument, self).to_dict(include_meta=include_meta)
+        data = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently. DocType uses to_dict for
@@ -84,8 +85,8 @@ class BaseDocument(DocType):
         # that we're saving to es
         if request is not None:
             # add some nefertari metadata
-            d['_type'] = self.__class__.__name__
-            d['_pk'] = str(getattr(self, self.pk_field()))
+            data['_type'] = self.__class__.__name__
+            data['_pk'] = str(getattr(self, self.pk_field()))
 
         # replace referenced instances with their ids when saving to
         # es
@@ -95,16 +96,28 @@ class BaseDocument(DocType):
                 # don't replace it with its id
                 continue
             if include_meta:
-                loc = d['_source']
+                loc = data['_source']
             else:
-                loc = d
+                loc = data
             if name in loc:
                 inst = getattr(self, name)
                 if isinstance(inst, (list, AttrList)):
                     loc[name] = [i._id for i in inst]
                 else:
                     loc[name] = inst._id
-        return d
+        return data
+
+    @classmethod
+    def _flatten_relationships(cls, params):
+        for name in cls._relationships():
+            if name not in params:
+                continue
+            inst = params[name]
+            if isinstance(inst, (list, AttrList)):
+                params[name] = [i._id for i in inst]
+            else:
+                params[name] = inst._id
+        return params
 
     @classmethod
     def _relationships(cls):
@@ -150,6 +163,7 @@ class BaseDocument(DocType):
     @classmethod
     def _update_many(cls, items, params, request=None):
         cls._save_relationships(params)
+        params = cls._flatten_relationships(params)
         if not items:
             return
 
