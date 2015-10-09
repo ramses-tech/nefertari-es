@@ -16,11 +16,11 @@ from nefertari.utils import (
     drop_reserved_params,
     split_strip,
     )
-from .meta import RegisteredDocMeta
+from .meta import BackrefGeneratingDocMeta
 from .fields import ReferenceField, IdField
 
 
-@add_metaclass(RegisteredDocMeta)
+@add_metaclass(BackrefGeneratingDocMeta)
 class BaseDocument(DocType):
 
     _public_fields = None
@@ -101,10 +101,12 @@ class BaseDocument(DocType):
                 loc = data
             if name in loc:
                 inst = getattr(self, name)
+                field_obj = self._doc_type.mapping[name]
+                pk_field = field_obj._doc_class.pk_field()
                 if isinstance(inst, (list, AttrList)):
-                    loc[name] = [i._id for i in inst]
+                    loc[name] = [getattr(i, pk_field) for i in inst]
                 else:
-                    loc[name] = inst._id
+                    loc[name] = getattr(inst, pk_field)
         return data
 
     @classmethod
@@ -113,10 +115,12 @@ class BaseDocument(DocType):
             if name not in params:
                 continue
             inst = params[name]
+            field_obj = cls._doc_type.mapping[name]
+            pk_field = field_obj._doc_class.pk_field()
             if isinstance(inst, (list, AttrList)):
-                params[name] = [i._id for i in inst]
+                params[name] = [getattr(i, pk_field) for i in inst]
             else:
-                params[name] = inst._id
+                params[name] = getattr(inst, pk_field)
         return params
 
     @classmethod

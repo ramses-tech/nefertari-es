@@ -160,7 +160,17 @@ class DecimalField(BaseFieldMixin, field.Double):
 
 
 class ReferenceField(CustomMappingMixin, field.Nested):
+    _backref_prefix = 'backref_'
     _custom_mapping = {'type': 'string'}
+
+    def __init__(self, *args, **kwargs):
+        prefix_len = len(self._backref_prefix)
+        self._backref_kwargs = {
+            key[prefix_len:]: val for key, val in kwargs.items()
+            if key.startswith(self._backref_prefix)}
+        for key in self._backref_kwargs:
+            del kwargs[self._backref_prefix + key]
+        super(ReferenceField, self).__init__(*args, **kwargs)
 
     @property
     def _doc_class(self):
@@ -190,11 +200,11 @@ class ReferenceField(CustomMappingMixin, field.Nested):
         return super_call(data)
 
 
-def Relationship(document_type, uselist=True, nested=True, *args, **kw):
+def Relationship(document_type, uselist=True, nested=True, **kw):
     # XXX deal with backrefs
     # XXX deal with updating, deleting rules
 
     return ReferenceField(
         multi=uselist,
-        doc_class=document_type
-        )
+        doc_class=document_type,
+        **kw)
