@@ -16,9 +16,6 @@ class TestBaseDocument(object):
         field._primary_key = True
         assert simple_model.pk_field() == 'name'
 
-    def test_pk_field_default(self, simple_model):
-        assert simple_model.pk_field() == '_id'
-
     def test_get_item_found(self, simple_model):
         simple_model.get_collection = Mock(return_value=['one', 'two'])
         item = simple_model.get_item(foo=1)
@@ -167,7 +164,7 @@ class TestGetCollection(object):
             simple_model, {'foo': 2}, True)
         mock_search.assert_called_once_with()
         mock_search().filter.assert_called_once_with(
-            'term', foo=1)
+            'terms', foo=[1])
         assert result == mock_search().filter().execute().hits
 
     def test_count_param(self, mock_search, simple_model):

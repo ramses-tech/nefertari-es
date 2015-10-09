@@ -162,6 +162,7 @@ class DecimalField(BaseFieldMixin, field.Double):
 class ReferenceField(CustomMappingMixin, field.Nested):
     _backref_prefix = 'backref_'
     _custom_mapping = {'type': 'string'}
+    _coerce = False
 
     def __init__(self, *args, **kwargs):
         prefix_len = len(self._backref_prefix)
@@ -181,23 +182,11 @@ class ReferenceField(CustomMappingMixin, field.Nested):
     def _doc_class(self, name):
         self._doc_class_name = name
 
-    def to_python(self, data):
-        super_call = super(ReferenceField, self)._to_python
-        if not data:
-            return super_call(data)
-
-        types = (self._doc_class, AttrDict)
-        single_pk = not self._multi and not isinstance(data, types)
-        if single_pk:
-            pk_field = self._doc_class.pk_field()
-            data = self._doc_class.get_item(**{pk_field: data})
-
-        multi_pk = self._multi and not isinstance(data[0], types)
-        if multi_pk:
-            pk_field = self._doc_class.pk_field()
-            data = self._doc_class.get_collection(**{pk_field: data})
-
-        return super_call(data)
+    def clean(self, data):
+        types = (self._doc_class, list, AttrDict, AttrList)
+        if not isinstance(data, types):
+            return data
+        return super(ReferenceField, self).clean(data)
 
 
 def Relationship(document_type, uselist=True, nested=True, **kw):

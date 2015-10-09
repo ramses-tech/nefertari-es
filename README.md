@@ -8,9 +8,8 @@ Some issues to get basic engine working
 
 - finish implementing relationship fields. Also there are
   many other details of relationships that need implementing:
-  delete/update triggers, saving related objects when saving an
-  instance that has related objects, back refs. Fix endless loop
-  when using backref and objects on both sides are connected.
+  delete/update triggers. Make backrefs not required (nullable).
+  Sync backrefs/relationships.
 
 - nesting
 

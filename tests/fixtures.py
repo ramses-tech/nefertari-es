@@ -12,7 +12,7 @@ from nefertari_es.fields import (
 @pytest.fixture
 def simple_model(request):
     class Item(BaseDocument):
-        name = StringField()
+        name = StringField(primary_key=True)
         price = IntegerField()
         connection = property(Mock())
     return Item
@@ -21,21 +21,21 @@ def simple_model(request):
 @pytest.fixture
 def person_model():
     class Person(BaseDocument):
-        name = StringField()
+        name = StringField(primary_key=True)
     return Person
 
 
 @pytest.fixture
 def tag_model():
     class Tag(BaseDocument):
-        name = StringField()
+        name = StringField(primary_key=True)
     return Tag
 
 
 @pytest.fixture
 def story_model():
     class Story(BaseDocument):
-        title = StringField()
+        name = StringField(primary_key=True)
         author = Relationship(document_type='Person', uselist=False)
         tags = Relationship(document_type='Tag', uselist=True)
     return Story

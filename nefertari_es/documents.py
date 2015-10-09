@@ -3,7 +3,7 @@ from six import (
     string_types,
     )
 from elasticsearch_dsl import DocType
-from elasticsearch_dsl.utils import AttrList
+from elasticsearch_dsl.utils import AttrList, AttrDict
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
@@ -53,10 +53,38 @@ class BaseDocument(DocType):
             if field not in data:
                 continue
             value = data[field]
-            if isinstance(value, (list, AttrList)):
-                return [obj.save() for obj in value]
-            else:
-                value.save()
+            if not isinstance(value, (list, AttrList)):
+                value = [value]
+            return [obj.save() for obj in value if hasattr(obj, 'save')]
+
+    @classmethod
+    def from_es(cls, hit):
+        super_call = super(BaseDocument, cls).from_es
+        if '_source' not in hit:
+            return super_call(hit)
+
+        hit = hit.copy()
+        doc = hit['_source']
+        relationship_fields = cls._relationships()
+
+        for name in relationship_fields:
+            if name not in doc or name not in cls._nested_relationships:
+                continue
+            field = cls._doc_type.mapping[name]
+            types = (field._doc_class, AttrDict)
+            data = doc[name]
+
+            single_pk = not field._multi and not isinstance(data, types)
+            if single_pk:
+                pk_field = field._doc_class.pk_field()
+                doc[name] = field._doc_class.get_item(**{pk_field: data})
+
+            multi_pk = field._multi and not isinstance(data[0], types)
+            if multi_pk:
+                pk_field = field._doc_class.pk_field()
+                doc[name] = field._doc_class.get_collection(**{pk_field: data})
+
+        return super_call(hit)
 
     def save(self, request=None):
         self._save_relationships(self._d_)
@@ -104,9 +132,9 @@ class BaseDocument(DocType):
                 field_obj = self._doc_type.mapping[name]
                 pk_field = field_obj._doc_class.pk_field()
                 if isinstance(inst, (list, AttrList)):
-                    loc[name] = [getattr(i, pk_field) for i in inst]
+                    loc[name] = [getattr(i, pk_field, i) for i in inst]
                 else:
-                    loc[name] = getattr(inst, pk_field)
+                    loc[name] = getattr(inst, pk_field, inst)
         return data
 
     @classmethod
@@ -118,9 +146,9 @@ class BaseDocument(DocType):
             field_obj = cls._doc_type.mapping[name]
             pk_field = field_obj._doc_class.pk_field()
             if isinstance(inst, (list, AttrList)):
-                params[name] = [getattr(i, pk_field) for i in inst]
+                params[name] = [getattr(i, pk_field, i) for i in inst]
             else:
-                params[name] = getattr(inst, pk_field)
+                params[name] = getattr(inst, pk_field, inst)
         return params
 
     @classmethod
