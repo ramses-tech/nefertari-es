@@ -82,10 +82,9 @@ class BaseDocument(DocType):
         # looking for a request argument. If it's present we assume
         # that we're serving JSON to the client, otherwise we assume
         # that we're saving to es
-
         if request is not None:
             # add some nefertari metadata
-            d['_type'] = self._doc_type.name
+            d['_type'] = self.__class__.__name__
             d['_pk'] = str(getattr(self, self.pk_field()))
 
         # replace referenced instances with their ids when saving to
@@ -113,12 +112,6 @@ class BaseDocument(DocType):
             name for name in cls._doc_type.mapping
             if isinstance(cls._doc_type.mapping[name], ReferenceField)
             ]
-
-    @classmethod
-    def from_es(cls, hit):
-        inst = super(BaseDocument, cls).from_es(hit)
-        # XXX fetch relationship objects and add them to the instance
-        return inst
 
     @classmethod
     def pk_field(cls):
@@ -272,12 +265,10 @@ class BaseDocument(DocType):
             search_obj = search_obj.fields(include)
 
         if params:
-            pk_field = cls.pk_field()
-            if pk_field in params:
-                params['_id'] = params.pop(pk_field)
             params = _cleaned_query_params(cls, params, _strict)
+            params = _restructure_params(cls, params)
             if params:
-                search_obj = search_obj.filter('term', **params)
+                search_obj = search_obj.filter('terms', **params)
 
         if q is not None:
             query_kw = {'query': q}
@@ -337,6 +328,19 @@ def _cleaned_query_params(cls, params, strict):
         for key in invalid_params:
             del params[key]
 
+    return params
+
+
+def _restructure_params(cls, params):
+    pk_field = cls.pk_field()
+    if pk_field in params:
+        field_obj = cls._doc_type.mapping[pk_field]
+        if isinstance(field_obj, IdField):
+            params['_id'] = params.pop(pk_field)
+
+    for field, param in params.items():
+        if not isinstance(param, list):
+            params[field] = [param]
     return params
 
 

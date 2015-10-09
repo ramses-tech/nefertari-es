@@ -1,12 +1,13 @@
 import datetime
 from dateutil import parser
 
+import six
 from elasticsearch_dsl import (
     field,
     DocType,
     )
 from elasticsearch_dsl.exceptions import ValidationException
-from elasticsearch_dsl.utils import AttrList
+from elasticsearch_dsl.utils import AttrList, AttrDict
 
 # ChoiceField
 # PickleField
@@ -159,7 +160,6 @@ class DecimalField(BaseFieldMixin, field.Double):
 
 
 class ReferenceField(CustomMappingMixin, field.Nested):
-
     _custom_mapping = {'type': 'string'}
 
     @property
@@ -170,6 +170,24 @@ class ReferenceField(CustomMappingMixin, field.Nested):
     @_doc_class.setter
     def _doc_class(self, name):
         self._doc_class_name = name
+
+    def to_python(self, data):
+        super_call = super(ReferenceField, self)._to_python
+        if not data:
+            return super_call(data)
+
+        types = (self._doc_class, AttrDict)
+        single_pk = not self._multi and not isinstance(data, types)
+        if single_pk:
+            pk_field = self._doc_class.pk_field()
+            data = self._doc_class.get_item(**{pk_field: data})
+
+        multi_pk = self._multi and not isinstance(data[0], types)
+        if multi_pk:
+            pk_field = self._doc_class.pk_field()
+            data = self._doc_class.get_collection(**{pk_field: data})
+
+        return super_call(data)
 
 
 def Relationship(document_type, uselist=True, nested=True, *args, **kw):

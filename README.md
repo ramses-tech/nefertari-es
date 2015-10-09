@@ -6,9 +6,7 @@ Backend and search engine for Nefertari
 
 Some issues to get basic engine working
 
-- finish implementing relationship fields. need to make related
-  objects get fetched from es when loading instances that have
-  related object. probably should be done in `from_es`. Also there are
+- finish implementing relationship fields. Also there are
   many other details of relationships that need implementing:
   delete/update triggers, saving related objects when saving an
   instance that has related objects, back refs.
