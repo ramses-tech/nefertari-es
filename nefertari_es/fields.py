@@ -184,7 +184,7 @@ class ReferenceField(CustomMappingMixin, field.Nested):
 
     def empty(self):
         if not self._required:
-            return None
+            return AttrList([]) if self._multi else None
         return super(ReferenceField, self).empty()
 
     def clean(self, data):
