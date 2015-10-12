@@ -3,7 +3,7 @@ from six import (
     string_types,
     )
 from elasticsearch_dsl import DocType
-from elasticsearch_dsl.utils import AttrList
+from elasticsearch_dsl.utils import AttrList, AttrDict
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
@@ -16,27 +16,85 @@ from nefertari.utils import (
     drop_reserved_params,
     split_strip,
     )
-from .meta import RegisteredDocMeta
-from .fields import ReferenceField
+from .meta import BackrefGeneratingDocMeta
+from .fields import ReferenceField, IdField
 
 
-@add_metaclass(RegisteredDocMeta)
+@add_metaclass(BackrefGeneratingDocMeta)
 class BaseDocument(DocType):
 
+    _public_fields = None
+    _auth_fields = None
+    _hidden_fields = None
     _nested_relationships = ()
 
-    # XXX implement auth and public fields?
-    _auth_fields = None
-    _public_fields = None
+    def __init__(self, *args, **kwargs):
+        super(BaseDocument, self).__init__(*args, **kwargs)
+        self._sync_id_field()
+
+    def _sync_id_field(self):
+        """ Copy meta["_id"] to IdField. """
+        if self.pk_field_type() is IdField:
+            pk_field = self.pk_field()
+            if not getattr(self, pk_field, None) and self._id:
+                setattr(self, pk_field, str(self._id))
+
+    def __getattr__(self, name):
+        if name == '_id' and 'id' not in self.meta:
+            return
+        return super(BaseDocument, self).__getattr__(name)
+
+    @classmethod
+    def _save_relationships(cls, data):
+        """ Go through relationship instances and save them, so that
+        changes aren't lost, and so that fresh instances get ids
+        """
+        for field in cls._relationships():
+            if field not in data:
+                continue
+            value = data[field]
+            if not isinstance(value, (list, AttrList)):
+                value = [value]
+            return [obj.save() for obj in value if hasattr(obj, 'save')]
+
+    @classmethod
+    def from_es(cls, hit):
+        super_call = super(BaseDocument, cls).from_es
+        if '_source' not in hit:
+            return super_call(hit)
+
+        hit = hit.copy()
+        doc = hit['_source']
+        relationship_fields = cls._relationships()
+
+        for name in relationship_fields:
+            if name not in doc or name not in cls._nested_relationships:
+                continue
+            field = cls._doc_type.mapping[name]
+            types = (field._doc_class, AttrDict)
+            data = doc[name]
+
+            single_pk = not field._multi and not isinstance(data, types)
+            if single_pk:
+                pk_field = field._doc_class.pk_field()
+                doc[name] = field._doc_class.get_item(**{pk_field: data})
+
+            multi_pk = field._multi and not isinstance(data[0], types)
+            if multi_pk:
+                pk_field = field._doc_class.pk_field()
+                doc[name] = field._doc_class.get_collection(**{pk_field: data})
+
+        return super_call(hit)
 
     def save(self, request=None):
-        # XXX need to go through relationship instances and save them
-        # first, so that changes aren't lost, and so that fresh
-        # instances get ids
+        self._save_relationships(self._d_)
         super(BaseDocument, self).save()
+        self._sync_id_field()
         return self
 
     def update(self, params, request=None):
+        self._save_relationships(params)
+        params = self._flatten_relationships(params)
         super(BaseDocument, self).update(**params)
         return self
 
@@ -44,7 +102,7 @@ class BaseDocument(DocType):
         super(BaseDocument, self).delete()
 
     def to_dict(self, include_meta=False, _keys=None, request=None):
-        d = super(BaseDocument, self).to_dict(include_meta=include_meta)
+        data = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently. DocType uses to_dict for
@@ -53,11 +111,10 @@ class BaseDocument(DocType):
         # looking for a request argument. If it's present we assume
         # that we're serving JSON to the client, otherwise we assume
         # that we're saving to es
-
         if request is not None:
             # add some nefertari metadata
-            d['_type'] = self._doc_type.name
-            d['_pk'] = str(getattr(self, self.pk_field()))
+            data['_type'] = self.__class__.__name__
+            data['_pk'] = str(getattr(self, self.pk_field()))
 
         # replace referenced instances with their ids when saving to
         # es
@@ -67,28 +124,39 @@ class BaseDocument(DocType):
                 # don't replace it with its id
                 continue
             if include_meta:
-                loc = d['_source']
+                loc = data['_source']
             else:
-                loc = d
+                loc = data
             if name in loc:
                 inst = getattr(self, name)
+                field_obj = self._doc_type.mapping[name]
+                pk_field = field_obj._doc_class.pk_field()
                 if isinstance(inst, (list, AttrList)):
-                    loc[name] = [i._id for i in inst]
+                    loc[name] = [getattr(i, pk_field, i) for i in inst]
                 else:
-                    loc[name] = inst._id
-        return d
-
-    def _relationships(self):
-        return [
-            name for name in self._doc_type.mapping
-            if isinstance(self._doc_type.mapping[name], ReferenceField)
-            ]
+                    loc[name] = getattr(inst, pk_field, inst)
+        return data
 
     @classmethod
-    def from_es(cls, hit):
-        inst = DocType.from_es(hit)
-        # XXX fetch relationship objects and add them to the instance
-        return inst
+    def _flatten_relationships(cls, params):
+        for name in cls._relationships():
+            if name not in params:
+                continue
+            inst = params[name]
+            field_obj = cls._doc_type.mapping[name]
+            pk_field = field_obj._doc_class.pk_field()
+            if isinstance(inst, (list, AttrList)):
+                params[name] = [getattr(i, pk_field, i) for i in inst]
+            else:
+                params[name] = getattr(inst, pk_field, inst)
+        return params
+
+    @classmethod
+    def _relationships(cls):
+        return [
+            name for name in cls._doc_type.mapping
+            if isinstance(cls._doc_type.mapping[name], ReferenceField)
+            ]
 
     @classmethod
     def pk_field(cls):
@@ -96,8 +164,13 @@ class BaseDocument(DocType):
             field = cls._doc_type.mapping[name]
             if getattr(field, '_primary_key', False):
                 return name
-        # XXX default to _id?
-        return '_id'
+        else:
+            raise AttributeError('No primary key field')
+
+    @classmethod
+    def pk_field_type(cls):
+        pk_field = cls.pk_field()
+        return cls._doc_type.mapping[pk_field].__class__
 
     @classmethod
     def get_item(cls, _raise_on_empty=True, **kw):
@@ -121,6 +194,8 @@ class BaseDocument(DocType):
 
     @classmethod
     def _update_many(cls, items, params, request=None):
+        cls._save_relationships(params)
+        params = cls._flatten_relationships(params)
         if not items:
             return
 
@@ -219,10 +294,8 @@ class BaseDocument(DocType):
             or ``sqlalchemy.exc.IntegrityError`` errors happen during DB
             query.
         """
-
         # XXX should we support query_set?
         # XXX do we need special support for _item_request
-
         search_obj = cls.search()
 
         if _limit is not None:
@@ -239,8 +312,9 @@ class BaseDocument(DocType):
 
         if params:
             params = _cleaned_query_params(cls, params, _strict)
+            params = _restructure_params(cls, params)
             if params:
-                search_obj = search_obj.filter('term', **params)
+                search_obj = search_obj.filter('terms', **params)
 
         if q is not None:
             query_kw = {'query': q}
@@ -276,6 +350,9 @@ class BaseDocument(DocType):
         # XXX - seems to be used to provide field init kw args
         return None
 
+    @classmethod
+    def fields_to_query(cls):
+        return set(cls._doc_type.mapping).union({'_id'})
 
 
 def _cleaned_query_params(cls, params, strict):
@@ -291,7 +368,7 @@ def _cleaned_query_params(cls, params, strict):
     if strict:
         _validate_fields(cls, params.keys())
     else:
-        field_names = frozenset(cls._doc_type.mapping)
+        field_names = frozenset(cls.fields_to_query())
         param_names = frozenset(params.keys())
         invalid_params = param_names.difference(field_names)
         for key in invalid_params:
@@ -300,8 +377,21 @@ def _cleaned_query_params(cls, params, strict):
     return params
 
 
+def _restructure_params(cls, params):
+    pk_field = cls.pk_field()
+    if pk_field in params:
+        field_obj = cls._doc_type.mapping[pk_field]
+        if isinstance(field_obj, IdField):
+            params['_id'] = params.pop(pk_field)
+
+    for field, param in params.items():
+        if not isinstance(param, list):
+            params[field] = [param]
+    return params
+
+
 def _validate_fields(cls, field_names):
-    valid_names = frozenset(cls._doc_type.mapping)
+    valid_names = frozenset(cls.fields_to_query())
     names = frozenset(field_names)
     invalid_names = names.difference(valid_names)
     if invalid_names:

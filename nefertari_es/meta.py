@@ -1,7 +1,5 @@
-from elasticsearch_dsl import Index, field
+from elasticsearch_dsl import Index
 from elasticsearch_dsl.document import DocTypeMeta
-
-from nefertari_es.fields import IdField
 
 # BaseDocument subclasses registry
 # maps class names to classes
@@ -52,4 +50,26 @@ class RegisteredDocMeta(DocTypeMeta):
         new_class = super(RegisteredDocMeta, cls).__new__(
             cls, name, bases, attrs)
         _document_registry[new_class.__name__] = new_class
+        return new_class
+
+
+class BackrefGeneratingDocMeta(RegisteredDocMeta):
+    def __new__(cls, name, bases, attrs):
+        from .fields import Relationship
+        new_class = super(BackrefGeneratingDocMeta, cls).__new__(
+            cls, name, bases, attrs)
+        relationships = new_class._relationships()
+        for name in relationships:
+            field = new_class._doc_type.mapping[name]
+            if not field._backref_kwargs:
+                continue
+
+            target_cls = field._doc_class
+            backref_kwargs = field._backref_kwargs.copy()
+            field_name = backref_kwargs.pop('name')
+            backref_kwargs.setdefault('uselist', False)
+            backref_field = Relationship(
+                new_class.__name__, **backref_kwargs)
+            target_cls._doc_type.mapping.field(field_name, backref_field)
+
         return new_class

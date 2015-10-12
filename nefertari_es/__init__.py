@@ -11,27 +11,54 @@ from .meta import (
     create_index,
     )
 from .fields import (
-    DateField,
+    IdField,
+    IntervalField,
+    DictField,
     DateTimeField,
+    DateField,
+    TimeField,
     IntegerField,
+    SmallIntegerField,
     StringField,
     TextField,
+    UnicodeField,
+    UnicodeTextField,
+    BigIntegerField,
+    BooleanField,
+    FloatField,
+    BinaryField,
+    DecimalField,
+    ReferenceField,
     Relationship,
     )
 
 
 __all__ = [
     'BaseDocument',
-    'DateField',
+    'IdField',
+    'IntervalField',
+    'DictField',
     'DateTimeField',
+    'DateField',
+    'TimeField',
     'IntegerField',
+    'SmallIntegerField',
     'StringField',
     'TextField',
+    'UnicodeField',
+    'UnicodeTextField',
+    'BigIntegerField',
+    'BooleanField',
+    'FloatField',
+    'BinaryField',
+    'DecimalField',
+    'ReferenceField',
     'Relationship',
     'setup_database',
     'get_document_cls',
     'get_document_classes',
     'is_relationship_field',
+    'get_relationship_cls',
     ]
 
 
@@ -72,5 +99,9 @@ def setup_index(conn, settings):
 
 
 def is_relationship_field(field, model_cls):
-    # XXX
-    return False
+    return field in model_cls._relationships()
+
+
+def get_relationship_cls(field, model_cls):
+    field_obj = model_cls._doc_type.mapping[field]
+    return field_obj._doc_class

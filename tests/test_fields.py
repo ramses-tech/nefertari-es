@@ -94,8 +94,8 @@ class TestRelationshipField(object):
         s._id = 's'
         assert s.to_dict(request=req) == {
             'name': 'Moby Dick',
-            '_pk': 's',
-            '_type': 'story'
+            '_pk': 'Moby Dick',
+            '_type': 'Story'
             }
         s.author = person_model(name='Melville')
         assert s.to_dict(request=req)['author'] == {'name': 'Melville'}
@@ -105,35 +105,29 @@ class TestRelationshipField(object):
             ]
 
     def test_to_dict_not_nested(self, story_model,
-                              person_model, tag_model):
+                                person_model, tag_model):
         req = Mock()
         s = story_model(name='Moby Dick')
         s._id = 's'
         assert s.to_dict(request=req) == {
             'name': 'Moby Dick',
-            '_pk': 's',
-            '_type': 'story'
+            '_pk': 'Moby Dick',
+            '_type': 'Story'
             }
         s.author = person_model(name='Melville')
-        s.author._id = 'a'
-        assert s.to_dict(request=req)['author'] == 'a'
+        assert s.to_dict(request=req)['author'] == 'Melville'
         t1 = tag_model(name='whaling')
-        t1._id = 't1'
         t2 = tag_model(name='literature')
-        t2._id = 't2'
         s.tags = [t1, t2]
-        assert s.to_dict(request=req)['tags'] == ['t1', 't2']
+        assert s.to_dict(request=req)['tags'] == ['whaling', 'literature']
 
     def test_to_dict_es(self, story_model, person_model, tag_model):
         s = story_model(name='Moby Dick')
         assert s.to_dict() == {'name': 'Moby Dick'}
         a = person_model(name='Melville')
-        a._id = 'a'
         s.author = a
-        assert s.to_dict()['author'] == 'a'
+        assert s.to_dict()['author'] == 'Melville'
         t1 = tag_model(name='whaling')
-        t1._id = 't1'
         t2 = tag_model(name='literature')
-        t2._id = 't2'
         s.tags = [t1, t2]
-        assert s.to_dict()['tags'] == ['t1', 't2']
+        assert s.to_dict()['tags'] == ['whaling', 'literature']
