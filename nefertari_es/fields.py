@@ -182,6 +182,11 @@ class ReferenceField(CustomMappingMixin, field.Nested):
     def _doc_class(self, name):
         self._doc_class_name = name
 
+    def empty(self):
+        if not self._required:
+            return None
+        return super(ReferenceField, self).empty()
+
     def clean(self, data):
         types = (self._doc_class, list, AttrDict, AttrList)
         if not isinstance(data, types):

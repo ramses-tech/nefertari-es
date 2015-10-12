@@ -8,8 +8,7 @@ Some issues to get basic engine working
 
 - finish implementing relationship fields. Also there are
   many other details of relationships that need implementing:
-  delete/update triggers. Make backrefs not required (nullable).
-  Sync backrefs/relationships.
+  delete/update triggers. Sync backrefs/relationships.
 
 - nesting
 
