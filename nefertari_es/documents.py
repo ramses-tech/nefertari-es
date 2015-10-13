@@ -36,12 +36,17 @@ class BaseDocument(DocType):
         """ Copy meta["_id"] to IdField. """
         if self.pk_field_type() is IdField:
             pk_field = self.pk_field()
-            if not getattr(self, pk_field, None) and self._id:
-                setattr(self, pk_field, str(self._id))
+            if not getattr(self, pk_field, None) and self._id is not None:
+                self._d_[pk_field] = str(self._id)
+
+    def __setattr__(self, name, value):
+        if name == self.pk_field() and self.pk_field_type() == IdField:
+            raise AttributeError('{} is read-only'.format(self.pk_field()))
+        super(BaseDocument, self).__setattr__(name, value)
 
     def __getattr__(self, name):
         if name == '_id' and 'id' not in self.meta:
-            return
+            return None
         return super(BaseDocument, self).__getattr__(name)
 
     @classmethod
@@ -49,6 +54,9 @@ class BaseDocument(DocType):
         """ Go through relationship instances and save them, so that
         changes aren't lost, and so that fresh instances get ids
         """
+        # XXX should check to see if related objects are dirty before
+        # saving, but I don't think that es-dsl keeps track of
+        # dirty/clean
         for field in cls._relationships():
             if field not in data:
                 continue

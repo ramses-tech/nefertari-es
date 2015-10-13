@@ -5,6 +5,7 @@ from nefertari_es.documents import BaseDocument
 from nefertari_es.fields import (
     StringField,
     IntegerField,
+    IdField,
     Relationship,
     )
 
@@ -39,3 +40,11 @@ def story_model():
         author = Relationship(document_type='Person', uselist=False)
         tags = Relationship(document_type='Tag', uselist=True)
     return Story
+
+
+@pytest.fixture
+def id_model():
+    class Doc(BaseDocument):
+        name = StringField()
+        id = IdField()
+    return Doc

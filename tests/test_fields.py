@@ -6,6 +6,7 @@ from elasticsearch_dsl.exceptions import ValidationException
 
 from nefertari_es import fields
 from .fixtures import (
+    id_model,
     story_model,
     tag_model,
     person_model,
@@ -91,7 +92,6 @@ class TestRelationshipField(object):
         story_model._nested_relationships = ('author', 'tags')
         req = Mock()
         s = story_model(name='Moby Dick')
-        s._id = 's'
         assert s.to_dict(request=req) == {
             'name': 'Moby Dick',
             '_pk': 'Moby Dick',
@@ -108,7 +108,6 @@ class TestRelationshipField(object):
                                 person_model, tag_model):
         req = Mock()
         s = story_model(name='Moby Dick')
-        s._id = 's'
         assert s.to_dict(request=req) == {
             'name': 'Moby Dick',
             '_pk': 'Moby Dick',
@@ -131,3 +130,22 @@ class TestRelationshipField(object):
         t2 = tag_model(name='literature')
         s.tags = [t1, t2]
         assert s.to_dict()['tags'] == ['whaling', 'literature']
+
+
+class TestIdField(object):
+
+    def test_read_only(self, id_model):
+        d = id_model()
+        with pytest.raises(AttributeError) as e:
+            d.id = 'fail'
+        assert str(e.value) == 'id is read-only'
+
+    def test_sync_id(self, id_model):
+        d = id_model()
+        assert d.id is None
+
+        # simulate a save
+        d._id = 'ID'
+        d._sync_id_field()
+
+        assert d.id == d._id
