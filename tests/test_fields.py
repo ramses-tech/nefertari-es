@@ -10,6 +10,7 @@ from .fixtures import (
     story_model,
     tag_model,
     person_model,
+    parent_model,
     )
 
 class TestFieldHelpers(object):
@@ -130,6 +131,20 @@ class TestRelationshipField(object):
         t2 = tag_model(name='literature')
         s.tags = [t1, t2]
         assert s.to_dict()['tags'] == ['whaling', 'literature']
+
+    def test_to_dict_back_ref(self, parent_model, person_model):
+        p = parent_model(name='parent-id')
+        c = person_model(name='child-id')
+        p.children = [c]
+        assert p.to_dict() == {'name': 'parent-id', 'children': ['child-id']}
+        assert c.to_dict() == {'name': 'child-id', 'parent': 'parent-id'}
+
+    def test_back_ref(self, parent_model, person_model):
+        p = parent_model(name='parent-id')
+        c = person_model(name='child-id')
+        p.children = [c]
+        p.save()
+        assert p.chilren[0].parent is p
 
 
 class TestIdField(object):

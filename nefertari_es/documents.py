@@ -63,7 +63,26 @@ class BaseDocument(DocType):
             value = data[field]
             if not isinstance(value, (list, AttrList)):
                 value = [value]
-            return [obj.save() for obj in value if hasattr(obj, 'save')]
+            return [
+                obj.save(relationship=True)
+                for obj in value if hasattr(obj, 'save')
+                ]
+
+    def _set_backrefs(self):
+        #if not self._id:
+        #    return
+        for name in self._relationships():
+            field = self._doc_type.mapping[name]
+            backref = field._backref_field_name()
+            if not backref:
+                continue
+            if not name in self:
+                continue
+            value = self[name]
+            if not isinstance(value, (list, AttrList)):
+                value = [value]
+            for obj in value:
+                obj[backref] = self
 
     @classmethod
     def from_es(cls, hit):
@@ -79,6 +98,9 @@ class BaseDocument(DocType):
             if name not in doc:
                 continue
             field = cls._doc_type.mapping[name]
+            if field._is_backref:
+                # don't load backrefs from db to avoid endless recursion
+                continue
             types = (field._doc_class, AttrDict)
             data = doc[name]
 
@@ -94,8 +116,10 @@ class BaseDocument(DocType):
 
         return super_call(hit)
 
-    def save(self, request=None):
-        self._save_relationships(self._d_)
+    def save(self, request=None, relationship=False):
+        self._set_backrefs()
+        if not relationship:
+            self._save_relationships(self._d_)
         super(BaseDocument, self).save()
         self._sync_id_field()
         return self
@@ -110,7 +134,20 @@ class BaseDocument(DocType):
         super(BaseDocument, self).delete()
 
     def to_dict(self, include_meta=False, _keys=None, request=None):
+        # avoid serializing backrefs (which leads to endless recursion)
+        backrefs = {}
+        for name in self._doc_type.mapping:
+            field = self._doc_type.mapping[name]
+            if isinstance(field, ReferenceField) and field._is_backref:
+                if name in self._d_:
+                    backrefs[name] = self._d_[name]
+                    self._d_[name] = backrefs[name]._id
+
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
+
+        # put backrefs back
+        for name, obj in backrefs.items():
+            self._d_[name] = obj
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently. DocType uses to_dict for
@@ -140,9 +177,9 @@ class BaseDocument(DocType):
                 field_obj = self._doc_type.mapping[name]
                 pk_field = field_obj._doc_class.pk_field()
                 if isinstance(inst, (list, AttrList)):
-                    loc[name] = [getattr(i, pk_field, i) for i in inst]
+                    loc[name] = [getattr(i, pk_field, None) for i in inst]
                 else:
-                    loc[name] = getattr(inst, pk_field, inst)
+                    loc[name] = getattr(inst, pk_field, None)
         return data
 
     @classmethod
