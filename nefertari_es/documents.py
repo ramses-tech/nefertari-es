@@ -68,7 +68,7 @@ class BaseDocument(DocType):
         relationship_fields = cls._relationships()
 
         for name in relationship_fields:
-            if name not in doc or name not in cls._nested_relationships:
+            if name not in doc:
                 continue
             field = cls._doc_type.mapping[name]
             types = (field._doc_class, AttrDict)
