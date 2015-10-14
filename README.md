@@ -8,16 +8,11 @@ Some issues to get basic engine working
 
 - finish implementing relationship fields.
 
-  - delete/update triggers.
+  - implement ondelete and onupdate?
 
   - improve efficiency of saving and loading of related objects. maybe
     lazy or bulk loading of related objects. Maybe check related
     objects to see if they are dirty before saving them.
-
-  - right now when loading back refs we don't fetch the records from
-    the db, because it creates an endless loop. We should probably
-    cache loaded instances by id in memory and then fetch related
-    items from the cache and only load from the db on cache misses.
 
   - there is an issue where obj `_id`s are not available until the
     objects are saved. so when saving related objects you can't put

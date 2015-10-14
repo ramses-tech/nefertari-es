@@ -86,35 +86,34 @@ class BaseDocument(DocType):
 
     @classmethod
     def from_es(cls, hit):
-        super_call = super(BaseDocument, cls).from_es
+        inst = super(BaseDocument, cls).from_es(hit)
+        id = inst[cls.pk_field()]
+        if not id in cls._cache:
+            cls._cache[id] = inst
         if '_source' not in hit:
-            return super_call(hit)
-
-        hit = hit.copy()
+            return inst
         doc = hit['_source']
-        relationship_fields = cls._relationships()
 
+        relationship_fields = cls._relationships()
         for name in relationship_fields:
             if name not in doc:
                 continue
             field = cls._doc_type.mapping[name]
-            if field._is_backref:
-                # don't load backrefs from db to avoid endless recursion
-                continue
-            types = (field._doc_class, AttrDict)
+            doc_class = field._doc_class
+            types = (doc_class, AttrDict)
             data = doc[name]
 
             single_pk = not field._multi and not isinstance(data, types)
             if single_pk:
-                pk_field = field._doc_class.pk_field()
-                doc[name] = field._doc_class.get_item(**{pk_field: data})
+                pk_field = doc_class.pk_field()
+                inst[name] = doc_class.get_item(**{pk_field: data})
 
             multi_pk = field._multi and not isinstance(data[0], types)
             if multi_pk:
-                pk_field = field._doc_class.pk_field()
-                doc[name] = field._doc_class.get_collection(**{pk_field: data})
+                pk_field = doc_class.pk_field()
+                inst[name] = doc_class.get_collection(**{pk_field: data})
 
-        return super_call(hit)
+        return inst
 
     def save(self, request=None, relationship=False):
         self._set_backrefs()
@@ -140,8 +139,10 @@ class BaseDocument(DocType):
             field = self._doc_type.mapping[name]
             if isinstance(field, ReferenceField) and field._is_backref:
                 if name in self._d_:
-                    backrefs[name] = self._d_[name]
-                    self._d_[name] = backrefs[name]._id
+                    inst = self._d_[name]
+                    backrefs[name] = inst
+                    key = inst.pk_field()
+                    self._d_[name] = inst[key]
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
@@ -226,6 +227,13 @@ class BaseDocument(DocType):
 
         :returns: Single collection item as an instance of ``cls``.
         """
+        # see if the item is cached
+        pk_field = cls.pk_field()
+        if list(kw.keys()) == [pk_field]:
+            id = kw[pk_field]
+            if id in cls._cache:
+                return cls._cache[id]
+
         result = cls.get_collection(
             _limit=1, _item_request=True,
             **kw
@@ -339,8 +347,24 @@ class BaseDocument(DocType):
             or ``sqlalchemy.exc.IntegrityError`` errors happen during DB
             query.
         """
-        # XXX should we support query_set?
-        # XXX do we need special support for _item_request
+        # see if the items are cached
+        pk_field = cls.pk_field()
+        if (list(params.keys()) == [pk_field] and _count==False
+            and _strict==True and _sort==None and _fields==None
+            and _limit==None and _page==None and _start==None
+            and _query_set==None and _item_request==False and _explain==None
+            and _search_fields==None and q==None):
+            ids = params[pk_field]
+            if not isinstance(ids, (list, tuple)):
+                ids = [ids]
+            results = []
+            for id in ids:
+                if not id in cls._cache:
+                    break
+                results.append(cls._cache[id])
+            else:
+                return results
+
         search_obj = cls.search()
 
         if _limit is not None:
