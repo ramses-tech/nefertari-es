@@ -20,6 +20,16 @@ Some issues to get basic engine working
     saved. thus the first time you save an object with backrefs to it,
     the backrefs won't be saved.
 
+  - backref set won't work on _update_many.
+
+  - change the way we work with backrefs.
+    - Backref shouldn't be one-sided as it is now. We shouldn't avoid
+      serializing backrefs because they should be serialized; we have
+      "_nesting_depth" param to control depth of nesting.
+    - Synchronization should not only work in object->backref direction
+      but also in backref->object - when backref is set, main relationship
+      field should also be updated.
+
 - tests - we need test relationship fields.
 
 

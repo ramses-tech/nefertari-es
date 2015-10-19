@@ -124,9 +124,13 @@ class BaseDocument(DocType):
         return self
 
     def update(self, params, request=None):
+        self._set_backrefs()
         self._save_relationships(params)
         params = self._flatten_relationships(params)
         super(BaseDocument, self).update(**params)
+        old_rels = {key: val for key, val in self._d_.items()
+                    if key not in params}
+        self._save_relationships(old_rels)
         return self
 
     def delete(self, request=None):
