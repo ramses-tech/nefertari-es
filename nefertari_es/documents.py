@@ -1,28 +1,53 @@
 from six import (
     add_metaclass,
-    string_types,
-    )
+)
 from elasticsearch_dsl import DocType
-from elasticsearch_dsl.utils import AttrList, AttrDict
+from elasticsearch_dsl.utils import AttrList
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
     JHTTPNotFound,
-    )
+)
 from nefertari.utils import (
     process_fields,
     process_limit,
     dictset,
-    drop_reserved_params,
     split_strip,
-    )
+)
 from .meta import BackrefGeneratingDocMeta
 from .fields import ReferenceField, IdField
 
 
-@add_metaclass(BackrefGeneratingDocMeta)
-class BaseDocument(DocType):
+class SyncRelatedMixin(object):
+    _backref_hooks = ()
 
+    def __setattr__(self, name, value):
+        if name in self._relationships():
+            self._sync_related(
+                new_value=value,
+                old_value=getattr(self, name, None),
+                field_name=name)
+        super(SyncRelatedMixin, self).__setattr__(name, value)
+
+    def _sync_related(self, new_value, old_value, field_name):
+        field = self._doc_type.mapping[field_name]
+        if not field._back_populates:
+            return
+
+    def save(self, *args, **kwargs):
+        try:
+            obj = super(SyncRelatedMixin, self).save(*args, **kwargs)
+        except:
+            raise
+        else:
+            for hook in self._backref_hooks:
+                hook(document=self)
+            self._backref_hooks = ()
+            return obj
+
+
+@add_metaclass(BackrefGeneratingDocMeta)
+class BaseDocument(SyncRelatedMixin, DocType):
     _public_fields = None
     _auth_fields = None
     _hidden_fields = None
@@ -65,8 +90,7 @@ class BaseDocument(DocType):
                 value = [value]
             return [
                 obj.save(relationship=True)
-                for obj in value if hasattr(obj, 'save')
-                ]
+                for obj in value if hasattr(obj, 'save')]
 
     def _set_backrefs(self):
         #if not self._id:
@@ -84,36 +108,36 @@ class BaseDocument(DocType):
             for obj in value:
                 obj[backref] = self
 
-    @classmethod
-    def from_es(cls, hit):
-        inst = super(BaseDocument, cls).from_es(hit)
-        id = inst[cls.pk_field()]
-        if not id in cls._cache:
-            cls._cache[id] = inst
-        if '_source' not in hit:
-            return inst
-        doc = hit['_source']
+    # @classmethod
+    # def from_es(cls, hit):
+    #     inst = super(BaseDocument, cls).from_es(hit)
+    #     id = inst[cls.pk_field()]
+    #     if not id in cls._cache:
+    #         cls._cache[id] = inst
+    #     if '_source' not in hit:
+    #         return inst
+    #     doc = hit['_source']
 
-        relationship_fields = cls._relationships()
-        for name in relationship_fields:
-            if name not in doc:
-                continue
-            field = cls._doc_type.mapping[name]
-            doc_class = field._doc_class
-            types = (doc_class, AttrDict)
-            data = doc[name]
+    #     relationship_fields = cls._relationships()
+    #     for name in relationship_fields:
+    #         if name not in doc:
+    #             continue
+    #         field = cls._doc_type.mapping[name]
+    #         doc_class = field._doc_class
+    #         types = (doc_class, AttrDict)
+    #         data = doc[name]
 
-            single_pk = not field._multi and not isinstance(data, types)
-            if single_pk:
-                pk_field = doc_class.pk_field()
-                inst[name] = doc_class.get_item(**{pk_field: data})
+    #         single_pk = not field._multi and not isinstance(data, types)
+    #         if single_pk:
+    #             pk_field = doc_class.pk_field()
+    #             inst[name] = doc_class.get_item(**{pk_field: data})
 
-            multi_pk = field._multi and not isinstance(data[0], types)
-            if multi_pk:
-                pk_field = doc_class.pk_field()
-                inst[name] = doc_class.get_collection(**{pk_field: data})
+    #         multi_pk = field._multi and not isinstance(data[0], types)
+    #         if multi_pk:
+    #             pk_field = doc_class.pk_field()
+    #             inst[name] = doc_class.get_collection(**{pk_field: data})
 
-        return inst
+    #     return inst
 
     def save(self, request=None, relationship=False):
         self._set_backrefs()
@@ -202,8 +226,7 @@ class BaseDocument(DocType):
     def _relationships(cls):
         return [
             name for name in cls._doc_type.mapping
-            if isinstance(cls._doc_type.mapping[name], ReferenceField)
-            ]
+            if isinstance(cls._doc_type.mapping[name], ReferenceField)]
 
     @classmethod
     def pk_field(cls):
@@ -235,10 +258,7 @@ class BaseDocument(DocType):
             if id in cls._cache:
                 return cls._cache[id]
 
-        result = cls.get_collection(
-            _limit=1, _item_request=True,
-            **kw
-            )
+        result = cls.get_collection(_limit=1, _item_request=True, **kw)
         if not result:
             if _raise_on_empty:
                 msg = "'%s(%s)' resource not found" % (cls.__name__, kw)
@@ -403,16 +423,14 @@ class BaseDocument(DocType):
             if _strict:
                 _validate_fields(
                     cls,
-                    [f[1:] if f.startswith('-') else f for f in sort_fields]
-                    )
+                    [f[1:] if f.startswith('-') else f for f in sort_fields])
             search_obj = search_obj.sort(*sort_fields)
 
         hits = search_obj.execute().hits
         hits._nefertari_meta = dict(
             total=hits.total,
             start=_start,
-            fields=_fields
-            )
+            fields=_fields)
         return hits
 
     @classmethod
