@@ -123,15 +123,12 @@ class BaseDocument(DocType):
         self._sync_id_field()
         return self
 
-    def update(self, params, request=None):
-        self._set_backrefs()
-        self._save_relationships(params)
-        params = self._flatten_relationships(params)
-        super(BaseDocument, self).update(**params)
-        old_rels = {key: val for key, val in self._d_.items()
-                    if key not in params}
-        self._save_relationships(old_rels)
-        return self
+    def update(self, params, **kw):
+        process_bools(params)
+        _validate_fields(self.__class__, params.keys())
+        for key, value in params.items():
+            setattr(self, key, value)
+        return self.save(**kw)
 
     def delete(self, request=None):
         super(BaseDocument, self).delete()
@@ -436,7 +433,7 @@ def _cleaned_query_params(cls, params, strict):
 
     # XXX support field__bool and field__in/field__all queries?
     # process_lists(params)
-    # process_bools(params)
+    process_bools(params)
 
     if strict:
         _validate_fields(cls, params.keys())
@@ -497,3 +494,12 @@ def _bulk(actions, client, op_type='index', request=None):
         raise Exception('Errors happened when executing Elasticsearch '
                         'actions: {}'.format('; '.join(errors)))
     return executed_num
+
+
+def process_bools(_dict):
+    for k in _dict:
+        new_k, _, _t = k.partition('__')
+        if _t == 'bool':
+            _dict[new_k] = _dict.pop_bool_param(k)
+
+    return _dict
