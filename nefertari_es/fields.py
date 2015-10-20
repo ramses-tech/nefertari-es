@@ -151,11 +151,12 @@ class DecimalField(BaseFieldMixin, field.Double):
     pass
 
 
-class ReferenceField(CustomMappingMixin, field.String):
+class ReferenceField(field.String):
     _backref_prefix = 'backref_'
     _coerce = False
 
-    def __init__(self, doc_class, is_backref=False, *args, **kwargs):
+    def __init__(self, doc_class, is_backref=False, back_populates=None,
+                 *args, **kwargs):
         prefix_len = len(self._backref_prefix)
         self._backref_kwargs = {
             key[prefix_len:]: val for key, val in kwargs.items()
@@ -164,6 +165,7 @@ class ReferenceField(CustomMappingMixin, field.String):
             del kwargs[self._backref_prefix + key]
         self._is_backref = is_backref
         self._doc_class = doc_class
+        self._back_populates = back_populates
         super(ReferenceField, self).__init__(*args, **kwargs)
 
     @property

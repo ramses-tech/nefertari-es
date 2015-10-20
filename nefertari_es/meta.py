@@ -72,7 +72,9 @@ class BackrefGeneratingDocMeta(RegisteredDocMeta):
             field_name = backref_kwargs.pop('name')
             backref_kwargs.setdefault('uselist', False)
             backref_field = Relationship(
-                new_class.__name__, is_backref=True, **backref_kwargs)
+                new_class.__name__, is_backref=True,
+                back_populates=name, **backref_kwargs)
             target_cls._doc_type.mapping.field(field_name, backref_field)
+            field._back_populates = field_name
 
         return new_class
