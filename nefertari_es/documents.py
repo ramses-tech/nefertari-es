@@ -83,18 +83,14 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
         field = self._doc_type.mapping[field_name]
         doc_cls = field._doc_class
+        if not isinstance(value, list):
+            value = [value]
 
-        single_pk = not field._multi and not isinstance(value, doc_cls)
-        if single_pk:
+        if not isinstance(value[0], doc_cls):
             pk_field = doc_cls.pk_field()
-            obj = doc_cls.get_item(**{pk_field: value})
-            self._d_[field_name] = obj
-
-        multi_pk = field._multi and not isinstance(value[0], doc_cls)
-        if multi_pk:
-            pk_field = doc_cls.pk_field()
-            objs = doc_cls.get_collection(**{pk_field: value})
-            self._d_[field_name] = objs
+            items = doc_cls.get_collection(**{pk_field: value})
+            if items:
+                self._d_[field_name] = items if field._multi else items[0]
 
     @classmethod
     def _save_relationships(cls, data):
@@ -134,8 +130,6 @@ class BaseDocument(SyncRelatedMixin, DocType):
     # def from_es(cls, hit):
     #     inst = super(BaseDocument, cls).from_es(hit)
     #     id = inst[cls.pk_field()]
-    #     if not id in cls._cache:
-    #         cls._cache[id] = inst
     #     if '_source' not in hit:
     #         return inst
     #     doc = hit['_source']
@@ -273,13 +267,6 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
         :returns: Single collection item as an instance of ``cls``.
         """
-        # see if the item is cached
-        pk_field = cls.pk_field()
-        if list(kw.keys()) == [pk_field]:
-            id = kw[pk_field]
-            if id in cls._cache:
-                return cls._cache[id]
-
         result = cls.get_collection(_limit=1, _item_request=True, **kw)
         if not result:
             if _raise_on_empty:
@@ -390,24 +377,6 @@ class BaseDocument(SyncRelatedMixin, DocType):
             or ``sqlalchemy.exc.IntegrityError`` errors happen during DB
             query.
         """
-        # see if the items are cached
-        pk_field = cls.pk_field()
-        if (list(params.keys()) == [pk_field] and _count==False
-            and _strict==True and _sort==None and _fields==None
-            and _limit==None and _page==None and _start==None
-            and _query_set==None and _item_request==False and _explain==None
-            and _search_fields==None and q==None):
-            ids = params[pk_field]
-            if not isinstance(ids, (list, tuple)):
-                ids = [ids]
-            results = []
-            for id in ids:
-                if not id in cls._cache:
-                    break
-                results.append(cls._cache[id])
-            else:
-                return results
-
         search_obj = cls.search()
 
         if _limit is not None:
