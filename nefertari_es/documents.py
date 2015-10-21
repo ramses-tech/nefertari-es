@@ -28,7 +28,7 @@ class SyncRelatedMixin(object):
             self._load_related(name)
             self._sync_related(
                 new_value=value,
-                old_value=self._d_.get(name, None),
+                old_value=self._d_.get(name),
                 field_name=name)
         super(SyncRelatedMixin, self).__setattr__(name, value)
 
@@ -37,9 +37,9 @@ class SyncRelatedMixin(object):
         if not field._back_populates or new_value == old_value:
             return
         if not isinstance(new_value, list):
-            new_value = [new_value]
+            new_value = [new_value] if new_value else []
         if not isinstance(old_value, list):
-            old_value = [old_value]
+            old_value = [old_value] if old_value else []
 
         added_values = set(new_value) - set(old_value)
         deleted_values = set(old_value) - set(new_value)
@@ -85,11 +85,11 @@ class SyncRelatedMixin(object):
         """
 
         def _del_hook(_item, _del_item, _field_name):
-            field = _item._doc_type.mapping[field_name]
             curr_val = getattr(_item, field_name, None)
             if not curr_val:
                 return
 
+            field = _item._doc_type.mapping[field_name]
             if field._multi:
                 new_val = list(curr_val or [])
                 if _del_item in new_val:
@@ -107,7 +107,7 @@ class SyncRelatedMixin(object):
         _hook = partial(
             _del_hook,
             _item=item,
-            _add_item=self,
+            _del_item=self,
             _field_name=field_name)
         self._backref_hooks += (_hook,)
 
@@ -187,53 +187,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
                 obj.save(relationship=True)
                 for obj in value if hasattr(obj, 'save')]
 
-    # def _set_backrefs(self):
-    #     #if not self._id:
-    #     #    return
-    #     for name in self._relationships():
-    #         field = self._doc_type.mapping[name]
-    #         backref = field._backref_field_name()
-    #         if not backref:
-    #             continue
-    #         if not name in self:
-    #             continue
-    #         value = self[name]
-    #         if not isinstance(value, (list, AttrList)):
-    #             value = [value]
-    #         for obj in value:
-    #             obj[backref] = self
-
-    # @classmethod
-    # def from_es(cls, hit):
-    #     inst = super(BaseDocument, cls).from_es(hit)
-    #     id = inst[cls.pk_field()]
-    #     if '_source' not in hit:
-    #         return inst
-    #     doc = hit['_source']
-
-    #     relationship_fields = cls._relationships()
-    #     for name in relationship_fields:
-    #         if name not in doc:
-    #             continue
-    #         field = cls._doc_type.mapping[name]
-    #         doc_class = field._doc_class
-    #         types = (doc_class, AttrDict)
-    #         data = doc[name]
-
-    #         single_pk = not field._multi and not isinstance(data, types)
-    #         if single_pk:
-    #             pk_field = doc_class.pk_field()
-    #             inst[name] = doc_class.get_item(**{pk_field: data})
-
-    #         multi_pk = field._multi and not isinstance(data[0], types)
-    #         if multi_pk:
-    #             pk_field = doc_class.pk_field()
-    #             inst[name] = doc_class.get_collection(**{pk_field: data})
-
-    #     return inst
-
     def save(self, request=None, relationship=False):
-        # self._set_backrefs()
         if not relationship:
             self._save_relationships(self._d_)
         super(BaseDocument, self).save()
@@ -251,22 +205,13 @@ class BaseDocument(SyncRelatedMixin, DocType):
         super(BaseDocument, self).delete()
 
     def to_dict(self, include_meta=False, _keys=None, request=None):
-        # avoid serializing backrefs (which leads to endless recursion)
-        # backrefs = {}
-        # for name in self._doc_type.mapping:
-        #     field = self._doc_type.mapping[name]
-        #     if isinstance(field, ReferenceField) and field._is_backref:
-        #         if name in self._d_:
-        #             inst = self._d_[name]
-        #             backrefs[name] = inst
-        #             key = inst.pk_field()
-        #             self._d_[name] = inst[key]
+        # DEBUG
+        for field in self._relationships():
+            value = self._d_.get(field)
+            if isinstance(value, DocType):
+                self._d_[field] = value._d_[value.pk_field()]
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
-
-        # put backrefs back
-        # for name, obj in backrefs.items():
-        #     self._d_[name] = obj
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently. DocType uses to_dict for
