@@ -24,10 +24,11 @@ class SyncRelatedMixin(object):
     _backref_hooks = ()
 
     def __setattr__(self, name, value):
-        if name in self._relationships():
+        if name in self._relationships() and value:
+            self._load_related(name)
             self._sync_related(
                 new_value=value,
-                old_value=getattr(self, name, None),
+                old_value=self._d_.get(name, None),
                 field_name=name)
         super(SyncRelatedMixin, self).__setattr__(name, value)
 
@@ -149,10 +150,10 @@ class BaseDocument(SyncRelatedMixin, DocType):
         if name == '_id' and 'id' not in self.meta:
             return None
         if name in self._relationships():
-            self._load_relation(name)
+            self._load_related(name)
         return super(BaseDocument, self).__getattr__(name)
 
-    def _load_relation(self, field_name):
+    def _load_related(self, field_name):
         value = field_name in self._d_ and self._d_[field_name]
         if not value:
             return
