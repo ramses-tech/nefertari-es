@@ -2,7 +2,7 @@ from six import (
     add_metaclass,
 )
 from elasticsearch_dsl import DocType
-from elasticsearch_dsl.utils import AttrList
+from elasticsearch_dsl.utils import AttrList, AttrDict
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
@@ -72,7 +72,29 @@ class BaseDocument(SyncRelatedMixin, DocType):
     def __getattr__(self, name):
         if name == '_id' and 'id' not in self.meta:
             return None
+        if name in self._relationships():
+            self._load_relation(name)
         return super(BaseDocument, self).__getattr__(name)
+
+    def _load_relation(self, field_name):
+        value = field_name in self._d_ and self._d_[field_name]
+        if not value:
+            return
+
+        field = self._doc_type.mapping[field_name]
+        doc_cls = field._doc_class
+
+        single_pk = not field._multi and not isinstance(value, doc_cls)
+        if single_pk:
+            pk_field = doc_cls.pk_field()
+            obj = doc_cls.get_item(**{pk_field: value})
+            self._d_[field_name] = obj
+
+        multi_pk = field._multi and not isinstance(value[0], doc_cls)
+        if multi_pk:
+            pk_field = doc_cls.pk_field()
+            objs = doc_cls.get_collection(**{pk_field: value})
+            self._d_[field_name] = objs
 
     @classmethod
     def _save_relationships(cls, data):
@@ -159,21 +181,21 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
     def to_dict(self, include_meta=False, _keys=None, request=None):
         # avoid serializing backrefs (which leads to endless recursion)
-        backrefs = {}
-        for name in self._doc_type.mapping:
-            field = self._doc_type.mapping[name]
-            if isinstance(field, ReferenceField) and field._is_backref:
-                if name in self._d_:
-                    inst = self._d_[name]
-                    backrefs[name] = inst
-                    key = inst.pk_field()
-                    self._d_[name] = inst[key]
+        # backrefs = {}
+        # for name in self._doc_type.mapping:
+        #     field = self._doc_type.mapping[name]
+        #     if isinstance(field, ReferenceField) and field._is_backref:
+        #         if name in self._d_:
+        #             inst = self._d_[name]
+        #             backrefs[name] = inst
+        #             key = inst.pk_field()
+        #             self._d_[name] = inst[key]
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
         # put backrefs back
-        for name, obj in backrefs.items():
-            self._d_[name] = obj
+        # for name, obj in backrefs.items():
+        #     self._d_[name] = obj
 
         # XXX DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently. DocType uses to_dict for
