@@ -1,3 +1,5 @@
+from functools import partial
+
 from six import (
     add_metaclass,
 )
@@ -31,8 +33,82 @@ class SyncRelatedMixin(object):
 
     def _sync_related(self, new_value, old_value, field_name):
         field = self._doc_type.mapping[field_name]
-        if not field._back_populates:
+        if not field._back_populates or new_value == old_value:
             return
+        if not isinstance(new_value, list):
+            new_value = [new_value]
+        if not isinstance(old_value, list):
+            old_value = [old_value]
+
+        added_values = set(new_value) - set(old_value)
+        deleted_values = set(old_value) - set(new_value)
+
+        if added_values:
+            for val in added_values:
+                self._register_addition_hook(val, field._back_populates)
+
+        if deleted_values:
+            for val in deleted_values:
+                self._register_deletion_hook(val, field._back_populates)
+
+    def _register_addition_hook(self, item, field_name):
+        """ Register hook to add `self` to `item` field `field_name`. """
+
+        def _add_hook(_item, _add_item, _field_name):
+            field = _item._doc_type.mapping[field_name]
+            curr_val = getattr(_item, field_name, None)
+            if field._multi:
+                new_val = list(curr_val or [])
+                if _add_item not in new_val:
+                    new_val.append(_add_item)
+            else:
+                new_val = _add_item
+
+            value_changed = (
+                (field._multi and set(curr_val or []) != set(new_val)) or
+                (not field._multi and curr_val != new_val))
+            if value_changed:
+                _item._d_[_field_name] = new_val
+                _item.save()
+
+        _hook = partial(
+            _add_hook,
+            _item=item,
+            _add_item=self,
+            _field_name=field_name)
+        self._backref_hooks += (_hook,)
+
+    def _register_deletion_hook(self, item, field_name):
+        """ Register hook to delete `self` from `item` field
+        `field_name`.
+        """
+
+        def _del_hook(_item, _del_item, _field_name):
+            field = _item._doc_type.mapping[field_name]
+            curr_val = getattr(_item, field_name, None)
+            if not curr_val:
+                return
+
+            if field._multi:
+                new_val = list(curr_val or [])
+                if _del_item in new_val:
+                    new_val.remove(_del_item)
+            else:
+                new_val = None
+
+            value_changed = (
+                (field._multi and set(curr_val or []) != set(new_val)) or
+                (not field._multi and curr_val != new_val))
+            if value_changed:
+                _item._d_[_field_name] = new_val
+                _item.save()
+
+        _hook = partial(
+            _del_hook,
+            _item=item,
+            _add_item=self,
+            _field_name=field_name)
+        self._backref_hooks += (_hook,)
 
     def save(self, *args, **kwargs):
         try:
@@ -41,7 +117,7 @@ class SyncRelatedMixin(object):
             raise
         else:
             for hook in self._backref_hooks:
-                hook(document=self)
+                hook()
             self._backref_hooks = ()
             return obj
 
@@ -110,21 +186,21 @@ class BaseDocument(SyncRelatedMixin, DocType):
                 obj.save(relationship=True)
                 for obj in value if hasattr(obj, 'save')]
 
-    def _set_backrefs(self):
-        #if not self._id:
-        #    return
-        for name in self._relationships():
-            field = self._doc_type.mapping[name]
-            backref = field._backref_field_name()
-            if not backref:
-                continue
-            if not name in self:
-                continue
-            value = self[name]
-            if not isinstance(value, (list, AttrList)):
-                value = [value]
-            for obj in value:
-                obj[backref] = self
+    # def _set_backrefs(self):
+    #     #if not self._id:
+    #     #    return
+    #     for name in self._relationships():
+    #         field = self._doc_type.mapping[name]
+    #         backref = field._backref_field_name()
+    #         if not backref:
+    #             continue
+    #         if not name in self:
+    #             continue
+    #         value = self[name]
+    #         if not isinstance(value, (list, AttrList)):
+    #             value = [value]
+    #         for obj in value:
+    #             obj[backref] = self
 
     # @classmethod
     # def from_es(cls, hit):
@@ -156,7 +232,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
     #     return inst
 
     def save(self, request=None, relationship=False):
-        self._set_backrefs()
+        # self._set_backrefs()
         if not relationship:
             self._save_relationships(self._d_)
         super(BaseDocument, self).save()
