@@ -24,7 +24,7 @@ class SyncRelatedMixin(object):
     _backref_hooks = ()
 
     def __setattr__(self, name, value):
-        if name in self._relationships() and value:
+        if name in self._relationships():
             self._load_related(name)
             self._sync_related(
                 new_value=value,
@@ -40,6 +40,7 @@ class SyncRelatedMixin(object):
             new_value = [new_value] if new_value else []
         if not isinstance(old_value, (list, AttrList)):
             old_value = [old_value] if old_value else []
+
         added_values = set(new_value) - set(old_value)
         deleted_values = set(old_value) - set(new_value)
 
@@ -55,8 +56,8 @@ class SyncRelatedMixin(object):
         """ Register hook to add `self` to `item` field `field_name`. """
 
         def _add_hook(_item, _add_item, _field_name):
-            field = _item._doc_type.mapping[field_name]
-            curr_val = getattr(_item, field_name, None)
+            field = _item._doc_type.mapping[_field_name]
+            curr_val = getattr(_item, _field_name, None)
             if field._multi:
                 new_val = list(curr_val or [])
                 if _add_item not in new_val:
@@ -68,8 +69,7 @@ class SyncRelatedMixin(object):
                 (field._multi and set(curr_val or []) != set(new_val)) or
                 (not field._multi and curr_val != new_val))
             if value_changed:
-                _item._d_[_field_name] = new_val
-                _item.save()
+                _item.update({_field_name: new_val}, refresh=True)
 
         _hook = partial(
             _add_hook,
@@ -84,11 +84,11 @@ class SyncRelatedMixin(object):
         """
 
         def _del_hook(_item, _del_item, _field_name):
-            curr_val = getattr(_item, field_name, None)
+            curr_val = getattr(_item, _field_name, None)
             if not curr_val:
                 return
 
-            field = _item._doc_type.mapping[field_name]
+            field = _item._doc_type.mapping[_field_name]
             if field._multi:
                 new_val = list(curr_val or [])
                 if _del_item in new_val:
@@ -100,8 +100,7 @@ class SyncRelatedMixin(object):
                 (field._multi and set(curr_val or []) != set(new_val)) or
                 (not field._multi and curr_val != new_val))
             if value_changed:
-                _item._d_[_field_name] = new_val
-                _item.save()
+                _item.update({_field_name: new_val}, refresh=True)
 
         _hook = partial(
             _del_hook,
@@ -143,13 +142,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
         return super(BaseDocument, self).__eq__(other)
 
     def __ne__(self, other):
-        if isinstance(other, self.__class__):
-            pk_field = self.pk_field()
-            self_pk = getattr(self, pk_field, None)
-            other_pk = getattr(other, pk_field, None)
-            return (self_pk is None or other_pk is None
-                    or self_pk != other_pk)
-        return super(BaseDocument, self).__ne__(other)
+        return not self.__eq__(other)
 
     @property
     def __hash__(self):
@@ -217,10 +210,10 @@ class BaseDocument(SyncRelatedMixin, DocType):
                 obj.save(relationship=True)
                 for obj in value if hasattr(obj, 'save')]
 
-    def save(self, request=None, relationship=False):
+    def save(self, request=None, relationship=False, **kwargs):
         if not relationship:
             self._save_relationships(self._d_)
-        super(BaseDocument, self).save()
+        super(BaseDocument, self).save(**kwargs)
         self._sync_id_field()
         return self
 
