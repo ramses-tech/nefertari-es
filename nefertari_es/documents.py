@@ -70,7 +70,7 @@ class SyncRelatedMixin(object):
                 (field._multi and set(curr_val or []) != set(new_val)) or
                 (not field._multi and curr_val != new_val))
             if value_changed:
-                _item.update({_field_name: new_val}, refresh=True)
+                _item.update({_field_name: new_val})
 
         _hook = partial(
             _add_hook,
@@ -102,7 +102,7 @@ class SyncRelatedMixin(object):
                 (field._multi and set(curr_val or []) != set(new_val)) or
                 (not field._multi and curr_val != new_val))
             if value_changed:
-                _item.update({_field_name: new_val}, refresh=True)
+                _item.update({_field_name: new_val})
 
         _hook = partial(
             _del_hook,
@@ -194,8 +194,8 @@ class BaseDocument(SyncRelatedMixin, DocType):
             if items:
                 self._d_[field_name] = items if field._multi else items[0]
 
-    def save(self, request=None, **kwargs):
-        super(BaseDocument, self).save(**kwargs)
+    def save(self, request=None, refresh=True, **kwargs):
+        super(BaseDocument, self).save(refresh=refresh, **kwargs)
         self._sync_id_field()
         return self
 
