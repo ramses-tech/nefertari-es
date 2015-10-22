@@ -63,7 +63,8 @@ class SyncRelatedMixin(object):
                 if _add_item not in new_val:
                     new_val.append(_add_item)
             else:
-                new_val = _add_item
+                new_val = (_add_item if _add_item != curr_val
+                           else curr_val)
 
             value_changed = (
                 (field._multi and set(curr_val or []) != set(new_val)) or
@@ -94,7 +95,8 @@ class SyncRelatedMixin(object):
                 if _del_item in new_val:
                     new_val.remove(_del_item)
             else:
-                new_val = None
+                new_val = (None if _del_item == curr_val
+                           else curr_val)
 
             value_changed = (
                 (field._multi and set(curr_val or []) != set(new_val)) or
