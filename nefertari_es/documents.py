@@ -194,27 +194,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
             if items:
                 self._d_[field_name] = items if field._multi else items[0]
 
-    @classmethod
-    def _save_relationships(cls, data):
-        """ Go through relationship instances and save them, so that
-        changes aren't lost, and so that fresh instances get ids
-        """
-        # XXX should check to see if related objects are dirty before
-        # saving, but I don't think that es-dsl keeps track of
-        # dirty/clean
-        for field in cls._relationships():
-            if field not in data:
-                continue
-            value = data[field]
-            if not isinstance(value, (list, AttrList)):
-                value = [value]
-            return [
-                obj.save(relationship=True)
-                for obj in value if hasattr(obj, 'save')]
-
-    def save(self, request=None, relationship=False, **kwargs):
-        if not relationship:
-            self._save_relationships(self._d_)
+    def save(self, request=None, **kwargs):
         super(BaseDocument, self).save(**kwargs)
         self._sync_id_field()
         return self
@@ -327,7 +307,6 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
     @classmethod
     def _update_many(cls, items, params, request=None):
-        cls._save_relationships(params)
         params = cls._flatten_relationships(params)
         if not items:
             return
