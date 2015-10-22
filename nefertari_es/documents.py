@@ -34,13 +34,12 @@ class SyncRelatedMixin(object):
 
     def _sync_related(self, new_value, old_value, field_name):
         field = self._doc_type.mapping[field_name]
-        if not field._back_populates or new_value == old_value:
+        if not field._back_populates:
             return
-        if not isinstance(new_value, list):
+        if not isinstance(new_value, (list, AttrList)):
             new_value = [new_value] if new_value else []
-        if not isinstance(old_value, list):
+        if not isinstance(old_value, (list, AttrList)):
             old_value = [old_value] if old_value else []
-
         added_values = set(new_value) - set(old_value)
         deleted_values = set(old_value) - set(new_value)
 
@@ -134,6 +133,37 @@ class BaseDocument(SyncRelatedMixin, DocType):
         super(BaseDocument, self).__init__(*args, **kwargs)
         self._sync_id_field()
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            pk_field = self.pk_field()
+            self_pk = getattr(self, pk_field, None)
+            other_pk = getattr(other, pk_field, None)
+            return (self_pk is not None and other_pk is not None
+                    and self_pk == other_pk)
+        return super(BaseDocument, self).__eq__(other)
+
+    def __ne__(self, other):
+        if isinstance(other, self.__class__):
+            pk_field = self.pk_field()
+            self_pk = getattr(self, pk_field, None)
+            other_pk = getattr(other, pk_field, None)
+            return (self_pk is None or other_pk is None
+                    or self_pk != other_pk)
+        return super(BaseDocument, self).__ne__(other)
+
+    @property
+    def __hash__(self):
+        pk_field = self.pk_field()
+        pk = getattr(self, pk_field, None)
+        if pk is None:
+            return None
+
+        def _hasher():
+            cls_name = self.__class__.__name__
+            return hash(cls_name + str(pk))
+
+        return _hasher
+
     def _sync_id_field(self):
         """ Copy meta["_id"] to IdField. """
         if self.pk_field_type() is IdField:
@@ -160,7 +190,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
         field = self._doc_type.mapping[field_name]
         doc_cls = field._doc_class
-        if not isinstance(value, list):
+        if not isinstance(value, (list, AttrList)):
             value = [value]
 
         if not isinstance(value[0], doc_cls):
@@ -197,7 +227,10 @@ class BaseDocument(SyncRelatedMixin, DocType):
     def update(self, params, **kw):
         process_bools(params)
         _validate_fields(self.__class__, params.keys())
+        pk_field = self.pk_field()
         for key, value in params.items():
+            if key == pk_field:
+                continue
             setattr(self, key, value)
         return self.save(**kw)
 
