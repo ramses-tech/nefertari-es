@@ -60,7 +60,6 @@ class BackrefGeneratingDocMeta(RegisteredDocMeta):
         from .fields import Relationship
         new_class = super(BackrefGeneratingDocMeta, cls).__new__(
             cls, name, bases, attrs)
-        new_class._cache = WeakValueDictionary()
 
         relationships = new_class._relationships()
         for name in relationships:
@@ -72,8 +71,8 @@ class BackrefGeneratingDocMeta(RegisteredDocMeta):
             field_name = backref_kwargs.pop('name')
             backref_kwargs.setdefault('uselist', False)
             backref_field = Relationship(
-                new_class.__name__, is_backref=True,
-                back_populates=name, **backref_kwargs)
+                new_class.__name__, **backref_kwargs)
+            backref_field._back_populates = name
             target_cls._doc_type.mapping.field(field_name, backref_field)
             field._back_populates = field_name
 

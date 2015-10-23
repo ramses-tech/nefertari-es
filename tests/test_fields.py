@@ -1,8 +1,9 @@
 import datetime
-from mock import Mock
+from mock import Mock, patch
 
 import pytest
 from elasticsearch_dsl.exceptions import ValidationException
+from elasticsearch_dsl.utils import AttrList, AttrDict
 
 from nefertari_es import fields
 from .fixtures import (
@@ -11,7 +12,7 @@ from .fixtures import (
     tag_model,
     person_model,
     parent_model,
-    )
+)
 
 class TestFieldHelpers(object):
 
@@ -25,6 +26,35 @@ class TestFieldHelpers(object):
 
         obj = DummyField()
         assert obj.to_dict() == {'foo': 3, 'bar': 2, 'zoo': 4}
+
+
+class TestFields(object):
+    def test_basefieldmixin(self):
+        class DummyBase(object):
+            def __init__(self, required=False):
+                self.required = required
+
+        class DummyField(fields.BaseFieldMixin, DummyBase):
+            pass
+        field = DummyField(primary_key=True)
+        assert field._primary_key
+        assert field.required
+
+    def test_idfield(self):
+        field = fields.IdField()
+        assert field._primary_key
+        assert not field._required
+
+    def test_idfield_empty(self):
+        field = fields.IdField()
+        assert field._empty() is None
+
+    def test_intervalfield_to_python(self):
+        from datetime import timedelta
+        field = fields.IntervalField()
+        val = field._to_python(600)
+        assert isinstance(val, timedelta)
+        assert val.total_seconds() == 600
 
 
 class TestDateTimeField(object):
@@ -89,7 +119,7 @@ class TestTimeField(object):
 class TestRelationshipField(object):
 
     def test_to_dict_nested(self, story_model,
-                              person_model, tag_model):
+                            person_model, tag_model):
         story_model._nested_relationships = ('author', 'tags')
         req = Mock()
         s = story_model(name='Moby Dick')
@@ -97,13 +127,14 @@ class TestRelationshipField(object):
             'name': 'Moby Dick',
             '_pk': 'Moby Dick',
             '_type': 'Story'
-            }
+        }
         s.author = person_model(name='Melville')
-        assert s.to_dict(request=req)['author'] == {'name': 'Melville'}
+        assert s.to_dict(request=req)['author'] == {
+            '_pk': 'Melville', '_type': 'Person', 'name': 'Melville'}
         s.tags = [tag_model(name='whaling'), tag_model(name='literature')]
         assert s.to_dict(request=req)['tags'] == [
-            {'name': 'whaling'}, {'name': 'literature'}
-            ]
+            {'_pk': 'whaling', '_type': 'Tag', 'name': 'whaling'},
+            {'_pk': 'literature', '_type': 'Tag', 'name': 'literature'}]
 
     def test_to_dict_not_nested(self, story_model,
                                 person_model, tag_model):
@@ -113,7 +144,7 @@ class TestRelationshipField(object):
             'name': 'Moby Dick',
             '_pk': 'Moby Dick',
             '_type': 'Story'
-            }
+        }
         s.author = person_model(name='Melville')
         assert s.to_dict(request=req)['author'] == 'Melville'
         t1 = tag_model(name='whaling')
@@ -132,37 +163,44 @@ class TestRelationshipField(object):
         s.tags = [t1, t2]
         assert s.to_dict()['tags'] == ['whaling', 'literature']
 
-    def test_to_dict_back_ref(self, person_model, parent_model):
-        p = parent_model(name='parent-id')
-        c = person_model(name='child-id')
-        p.children = [c]
-        p._set_backrefs()
-        assert c.to_dict() == {'name': 'child-id', 'parent': 'parent-id'}
 
-    def test_back_ref(self, person_model, parent_model):
-        p = parent_model(name='parent-id')
-        c = person_model(name='child-id')
-        p.children = [c]
-        p._set_backrefs()
-        assert p.children[0].parent is p
+class TestReferenceField(object):
+    def _get_field(self):
+        return fields.ReferenceField(
+            'Foo', uselist=False, backref_name='zoo')
 
-    def test_load_back_ref(self, person_model, parent_model):
-        p = parent_model.from_es(dict(_source=dict(name='parent-id')))
-        c = person_model.from_es(dict(_source=dict(name='child-id', parent='parent-id')))
-        assert c.parent is p
+    def test_init(self):
+        field = self._get_field()
+        assert field._doc_class_name == 'Foo'
+        assert not field._multi
+        assert field._backref_kwargs == {'name': 'zoo'}
 
-    def test_load_ref(self, person_model, parent_model):
-        c = person_model.from_es(dict(_source=dict(name='child-id')))
-        p = parent_model.from_es(dict(_source=dict(name='parent-id', children=['child-id'])))
-        assert p.children == [c]
+    @patch('nefertari_es.meta.get_document_cls')
+    def test_doc_class(self, mock_get):
+        field = self._get_field()
+        assert field._doc_class_name == 'Foo'
+        klass = field._doc_class
+        mock_get.assert_called_once_with('Foo')
+        assert klass == mock_get()
 
-    def test_save_ref(self, person_model, parent_model):
-        p = parent_model(name='parent-id')
-        c = person_model(name='child-id')
-        p.children = [c]
-        p.save()
-        assert p.children[0].parent is p
-        assert c.parent.children[0] is c
+    def test_empty_not_required(self):
+        field = self._get_field()
+        field._required = False
+        field._multi = True
+        val = field.empty()
+        assert isinstance(val, AttrList)
+        assert len(val) == 0
+
+        field._multi = False
+        assert field.empty() is None
+
+    @patch('nefertari_es.meta.get_document_cls')
+    def test_clean(self, mock_get):
+        mock_get.return_value = dict
+        field = self._get_field()
+        field._doc_class
+        val = 'asdasdasdasd'
+        assert field.clean(val) is val
 
 
 class TestIdField(object):

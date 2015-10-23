@@ -3,13 +3,121 @@ from mock import patch, Mock
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
     JHTTPNotFound,
-    )
+)
 
-from .fixtures import simple_model
+from .fixtures import (
+    simple_model, id_model, story_model, person_model,
+    tag_model, parent_model)
 from nefertari_es import documents as docs
 
 
 class TestBaseDocument(object):
+
+    def test_comparison(self, simple_model):
+        item1 = simple_model(name=None)
+        item2 = simple_model(name=None)
+        assert item1 != item2
+        item2.name = '2'
+        assert item1 != item2
+        item1.name = '1'
+        assert item1 != item2
+        item1.name = '2'
+        assert item1 == item2
+
+    def test_hash(self, simple_model):
+        items = set()
+        item1 = simple_model(name='1')
+        items.add(item1)
+        assert item1 in items
+        item2 = simple_model(name='asd')
+        assert item2 not in items
+        item2.name = '1'
+        assert item2 in items
+
+    def test_sync_id_field(self, id_model):
+        item = id_model()
+        assert item.id is None
+        item._id = 123
+        item._sync_id_field()
+        assert item.id == '123'
+
+    def test_setattr_readme_id(self, id_model):
+        item = id_model()
+        with pytest.raises(AttributeError) as ex:
+            item.id = 123
+        assert 'id is read-only' in str(ex.value)
+
+    def test_getattr_id_none(self, id_model):
+        item = id_model()
+        assert item._id is None
+        item.meta['id'] = 123
+        assert item._id == 123
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    def test_getattr_load_rel(self, mock_load, story_model):
+        story = story_model()
+        story.author
+        mock_load.assert_called_once_with('author')
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    def test_getattr_raw(self, mock_load, story_model):
+        story = story_model(author=1)
+        assert story._getattr_raw('author') == 1
+        assert not mock_load.called
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    def test_unload_related(self, mock_load, parent_model, person_model):
+        parent = parent_model()
+        parent.children = [person_model(name='123')]
+        assert isinstance(parent.children[0], person_model)
+        parent._unload_related('children')
+        assert parent.children == ['123']
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    def test_unload_related_no_ids(self, mock_load, parent_model,
+                                   person_model):
+        parent = parent_model()
+        person = person_model(name=None)
+        parent._d_['children'] = [person]
+        assert isinstance(parent.children[0], person_model)
+        parent._unload_related('children')
+        assert parent.children == [person]
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    def test_unload_related_no_curr_value(
+            self, mock_load, parent_model, person_model):
+        parent = parent_model()
+        parent._d_['children'] = []
+        parent._unload_related('children')
+        assert parent.children == []
+
+    def test_load_related(self, parent_model, person_model):
+        parent = parent_model()
+        parent.children = ['123']
+        with patch.object(person_model, 'get_collection') as mock_get:
+            mock_get.return_value = ['foo']
+            parent._load_related('children')
+            mock_get.assert_called_once_with(name=['123'])
+            assert parent.children == ['foo']
+
+    def test_load_related_no_items(self, parent_model, person_model):
+        parent = parent_model()
+        parent.children = ['123']
+        with patch.object(person_model, 'get_collection') as mock_get:
+            mock_get.return_value = []
+            parent._load_related('children')
+            mock_get.assert_called_once_with(name=['123'])
+            assert parent.children == ['123']
+
+    def test_load_related_no_curr_value(
+            self, parent_model, person_model):
+        parent = parent_model()
+        parent.children = []
+        with patch.object(person_model, 'get_collection') as mock_get:
+            mock_get.return_value = ['foo']
+            parent._load_related('children')
+            assert not mock_get.called
+            assert parent.children == []
 
     def test_pk_field(self, simple_model):
         field = simple_model._doc_type.mapping['name']

@@ -405,8 +405,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
             with full-text search(q param) to limit fields which are
             searched.
 
-        :returns: Query results as ``elasticsearch_dsl.XXX`` instance.
-            May be sorted, offset, limited.
+        :returns: Query results. May be sorted, offset, limited.
         :returns: Dict of {'field_name': fieldval}, when ``_fields`` param
             is provided.
         :returns: Number of query results as an int when ``_count`` param

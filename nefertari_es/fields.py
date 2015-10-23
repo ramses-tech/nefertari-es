@@ -154,18 +154,16 @@ class DecimalField(BaseFieldMixin, field.Double):
 class ReferenceField(field.String):
     _backref_prefix = 'backref_'
     _coerce = False
+    _back_populates = None
 
-    def __init__(self, doc_class, is_backref=False, back_populates=None,
-                 *args, **kwargs):
+    def __init__(self, doc_class, *args, **kwargs):
         prefix_len = len(self._backref_prefix)
         self._backref_kwargs = {
             key[prefix_len:]: val for key, val in kwargs.items()
             if key.startswith(self._backref_prefix)}
         for key in self._backref_kwargs:
             del kwargs[self._backref_prefix + key]
-        self._is_backref = is_backref
         self._doc_class = doc_class
-        self._back_populates = back_populates
         super(ReferenceField, self).__init__(*args, **kwargs)
 
     @property
@@ -188,13 +186,9 @@ class ReferenceField(field.String):
             return data
         return super(ReferenceField, self).clean(data)
 
-    def _backref_field_name(self):
-        return self._backref_kwargs.get('name')
-
 
 def Relationship(document_type, uselist=True, nested=True, **kw):
     # XXX deal with updating, deleting rules
-
     return ReferenceField(
         multi=uselist,
         doc_class=document_type,
