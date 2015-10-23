@@ -8,27 +8,7 @@ Some issues to get basic engine working
 
 - finish implementing relationship fields.
 
-  - implement ondelete and onupdate?
-
-  - improve efficiency of saving and loading of related objects. maybe
-    lazy or bulk loading of related objects. Maybe check related
-    objects to see if they are dirty before saving them.
-
-  - there is an issue where obj `_id`s are not available until the
-    objects are saved. so when saving related objects you can't put
-    the backref id in place until after the referring object is
-    saved. thus the first time you save an object with backrefs to it,
-    the backrefs won't be saved.
-
-  - backref set won't work on _update_many.
-
-  - change the way we work with backrefs.
-    - Backref shouldn't be one-sided as it is now. We shouldn't avoid
-      serializing backrefs because they should be serialized; we have
-      "_nesting_depth" param to control depth of nesting.
-    - Synchronization should not only work in object->backref direction
-      but also in backref->object - when backref is set, main relationship
-      field should also be updated.
+  - Rework objects dumping for response in to_dict
 
 - tests - we need test relationship fields.
 
@@ -55,3 +35,12 @@ package:
   when models are changed. it might make sense to change these hooks
   to generate pyramid events. then the es engine can listen for these
   events, thus de-coupling the engines.
+
+
+Advanced tasks:
+
+- implement ondelete/onupdate hooks for relationships
+
+- make relationships sync work on _update_many/_delete_many
+
+- caching of loaded ES documents

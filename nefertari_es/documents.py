@@ -129,6 +129,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
     _auth_fields = None
     _hidden_fields = None
     _nested_relationships = ()
+    _nesting_depth = 1
 
     def __init__(self, *args, **kwargs):
         super(BaseDocument, self).__init__(*args, **kwargs)
@@ -178,6 +179,26 @@ class BaseDocument(SyncRelatedMixin, DocType):
             self._load_related(name)
         return super(BaseDocument, self).__getattr__(name)
 
+    def _getattr_raw(self, name):
+        return self._d_[name]
+
+    def _unload_related(self, field_name):
+        value = field_name in self._d_ and self._d_[field_name]
+        if not value:
+            return
+
+        field = self._doc_type.mapping[field_name]
+        doc_cls = field._doc_class
+        if not isinstance(value, (list, AttrList)):
+            value = [value]
+
+        if isinstance(value[0], doc_cls):
+            pk_field = doc_cls.pk_field()
+            items = [getattr(item, pk_field, None) for item in value]
+            items = [item for item in items if item is not None]
+            if items:
+                self._d_[field_name] = items if field._multi else items[0]
+
     def _load_related(self, field_name):
         value = field_name in self._d_ and self._d_[field_name]
         if not value:
@@ -212,16 +233,31 @@ class BaseDocument(SyncRelatedMixin, DocType):
     def delete(self, request=None):
         super(BaseDocument, self).delete()
 
-    def to_dict(self, include_meta=False, _keys=None, request=None):
-        # DEBUG
-        for field in self._relationships():
-            value = self._d_.get(field)
-            if isinstance(value, DocType):
-                self._d_[field] = value._d_[value.pk_field()]
+    def to_dict(self, include_meta=False, _keys=None, request=None,
+                _depth=None):
+
+        if _depth is None:
+            _depth = self._nesting_depth
+        depth_reached = _depth is not None and _depth <= 0
+
+        for name in self._relationships():
+            include = (request is not None and
+                       name in self._nested_relationships and
+                       not depth_reached)
+            if not include:
+                self._unload_related(name)
+                continue
+
+            self._load_related(name)
+            value = getattr(self, name)
+            if not isinstance(value, (list, AttrList)):
+                value = [value]
+            for val in value:
+                val._nesting_depth = _depth - 1
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
-        # XXX DocType and nefertari both expect a to_dict method, but
+        # DocType and nefertari both expect a to_dict method, but
         # they expect it to act differently. DocType uses to_dict for
         # serialize for saving to es. nefertari uses it to serialize
         # for serving JSON to the client. For now we differentiate by
@@ -229,29 +265,8 @@ class BaseDocument(SyncRelatedMixin, DocType):
         # that we're serving JSON to the client, otherwise we assume
         # that we're saving to es
         if request is not None:
-            # add some nefertari metadata
             data['_type'] = self.__class__.__name__
             data['_pk'] = str(getattr(self, self.pk_field()))
-
-        # replace referenced instances with their ids when saving to
-        # es
-        for name in self._relationships():
-            if request is not None and name in self._nested_relationships:
-                # if we're serving JSON and nesting this field, then
-                # don't replace it with its id
-                continue
-            if include_meta:
-                loc = data['_source']
-            else:
-                loc = data
-            if name in loc:
-                inst = getattr(self, name)
-                field_obj = self._doc_type.mapping[name]
-                pk_field = field_obj._doc_class.pk_field()
-                if isinstance(inst, (list, AttrList)):
-                    loc[name] = [getattr(i, pk_field, None) for i in inst]
-                else:
-                    loc[name] = getattr(inst, pk_field, None)
         return data
 
     @classmethod
