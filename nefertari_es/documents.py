@@ -130,6 +130,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
     _hidden_fields = None
     _nested_relationships = ()
     _nesting_depth = 1
+    _request = None
 
     def __init__(self, *args, **kwargs):
         super(BaseDocument, self).__init__(*args, **kwargs)
@@ -239,6 +240,8 @@ class BaseDocument(SyncRelatedMixin, DocType):
         if _depth is None:
             _depth = self._nesting_depth
         depth_reached = _depth is not None and _depth <= 0
+        if request is None:
+            request = self._request
 
         for name in self._relationships():
             include = (request is not None and
@@ -250,10 +253,12 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
             self._load_related(name)
             value = getattr(self, name)
-            if not isinstance(value, (list, AttrList)):
-                value = [value]
-            for val in value:
-                val._nesting_depth = _depth - 1
+            if value:
+                if not isinstance(value, (list, AttrList)):
+                    value = [value]
+                for val in value:
+                    val._nesting_depth = _depth - 1
+                    val._request = request
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
