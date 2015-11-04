@@ -28,6 +28,7 @@ class CustomMappingMixin(object):
 
 class BaseFieldMixin(object):
     def __init__(self, *args, **kwargs):
+        self._init_kwargs = kwargs.copy()
         self._primary_key = kwargs.pop('primary_key', False)
         if self._primary_key:
             kwargs['required'] = True
@@ -151,7 +152,7 @@ class DecimalField(BaseFieldMixin, field.Double):
     pass
 
 
-class ReferenceField(field.String):
+class ReferenceField(BaseFieldMixin, field.String):
     _backref_prefix = 'backref_'
     _coerce = False
     _back_populates = None
@@ -187,9 +188,12 @@ class ReferenceField(field.String):
         return super(ReferenceField, self).clean(data)
 
 
-def Relationship(document_type, uselist=True, nested=True, **kw):
+def Relationship(document_type, **kwargs):
     # XXX deal with updating, deleting rules
-    return ReferenceField(
-        multi=uselist,
-        doc_class=document_type,
-        **kw)
+    _init_kwargs = kwargs.copy()
+    _init_kwargs['document_type'] = document_type
+    kwargs['multi'] = kwargs.pop('uselist', True)
+    kwargs['doc_class'] = document_type
+    field = ReferenceField(**kwargs)
+    field._init_kwargs = _init_kwargs
+    return field

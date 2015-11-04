@@ -1,5 +1,5 @@
 import pytest
-from mock import patch, Mock
+from mock import patch, Mock, call
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
     JHTTPNotFound,
@@ -119,10 +119,154 @@ class TestBaseDocument(object):
             assert not mock_get.called
             assert parent.children == []
 
+    def test_save(self, person_model):
+        person = person_model(name='foo')
+        person._sync_id_field = Mock()
+        person.save()
+        person._sync_id_field.assert_called_once_with()
+
+    def test_update(self, simple_model):
+        item = simple_model(name='foo', price=123)
+        assert item.name == 'foo'
+        assert item.price == 123
+        item.save = Mock()
+        item.update({'name': 'bar', 'price': 321}, zoo=1)
+        assert item.name == 'foo'
+        assert item.price == 321
+        item.save.assert_called_once_with(zoo=1)
+
+    def test_to_dict(self, simple_model):
+        item = simple_model(name='joe', price=42)
+        assert item.to_dict() == {'name': 'joe', 'price': 42}
+        assert item.to_dict(include_meta=True) == {
+            '_source': {'name': 'joe', 'price': 42}, '_type': 'Item'}
+
+    def test_to_dict_simple_request(self, simple_model):
+        item = simple_model(name='joe', price=42)
+        assert item.to_dict(request=True) == {
+            'name': 'joe', 'price': 42,
+            '_type': 'Item', '_pk': 'joe'}
+
+    def test_to_dict_nest_depth_not_reached(
+            self, person_model, tag_model, story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        story = story_model(name='11/22/63', author=sking, tags=[novel])
+        story._unload_related = Mock()
+        story._load_related = Mock()
+        story._nested_relationships = ['author', 'tags']
+        data = story.to_dict(request=True, _depth=1)
+        assert data == {
+            '_pk': '11/22/63',
+            '_type': 'Story',
+            'author': {'_pk': 'Stephen King', '_type': 'Person', 'name': 'Stephen King'},
+            'name': '11/22/63',
+            'tags': [{'_pk': 'novel', '_type': 'Tag', 'name': 'novel'}]
+        }
+        assert not story._unload_related.called
+        story._load_related.assert_has_calls([
+            call('author'), call('tags')], any_order=True)
+        assert sking._nesting_depth == 0
+        assert sking._request
+        assert novel._nesting_depth == 0
+        assert novel._request
+
+    def test_to_dict_nest_depth_reached(
+            self, person_model, tag_model, story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        story = story_model(name='11/22/63', author=sking, tags=[novel])
+        story._load_related = Mock()
+        story._nested_relationships = ['author', 'tags']
+        data = story.to_dict(request=True, _depth=0)
+        assert data == {
+            '_pk': '11/22/63',
+            '_type': 'Story',
+            'author': 'Stephen King',
+            'name': '11/22/63',
+            'tags': ['novel']
+        }
+        assert not story._load_related.called
+        assert sking._nesting_depth == 1
+        assert sking._request is None
+        assert novel._nesting_depth == 1
+        assert novel._request is None
+
+    def test_to_dict_nest_not_nested(
+            self, person_model, tag_model, story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        story = story_model(name='11/22/63', author=sking, tags=[novel])
+        story._load_related = Mock()
+        story._nested_relationships = ['tags']
+        data = story.to_dict(request=True, _depth=1)
+        assert data == {
+            '_pk': '11/22/63',
+            '_type': 'Story',
+            'author': 'Stephen King',
+            'name': '11/22/63',
+            'tags': [{'_pk': 'novel', '_type': 'Tag', 'name': 'novel'}]
+        }
+        story._load_related.assert_has_calls([call('tags')])
+        assert sking._nesting_depth == 1
+        assert sking._request is None
+        assert novel._nesting_depth == 0
+        assert novel._request
+
+    def test_to_dict_nest_no_request(
+            self, person_model, tag_model, story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        story = story_model(name='11/22/63', author=sking, tags=[novel])
+        story._load_related = Mock()
+        story._nested_relationships = ['author', 'tags']
+        data = story.to_dict(_depth=1)
+        assert data == {
+            'author': 'Stephen King',
+            'name': '11/22/63',
+            'tags': ['novel']
+        }
+        assert not story._load_related.called
+        assert sking._nesting_depth == 1
+        assert sking._request is None
+        assert novel._nesting_depth == 1
+        assert novel._request is None
+
+    def test_to_dict_nest_no_relations(
+            self, person_model, tag_model, story_model):
+        story = story_model(name='11/22/63', author=None, tags=[])
+        story._load_related = Mock()
+        story._nested_relationships = ['author', 'tags']
+        data = story.to_dict(request=True, _depth=1)
+        assert data == {
+            '_pk': '11/22/63', '_type': 'Story', 'name': '11/22/63'}
+        story._load_related.assert_has_calls([
+            call('author'), call('tags')], any_order=True)
+
+    def test_flatten_relationships(
+            self, person_model, tag_model, story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        params = {'name': '11/22/63', 'author': sking, 'tags': [novel]}
+        flat = story_model._flatten_relationships(params)
+        assert flat == {
+            'name': '11/22/63',
+            'author': 'Stephen King',
+            'tags': ['novel']}
+
+    def test_relationships_method(self, story_model):
+        assert set(story_model._relationships()) == {'author', 'tags'}
+
     def test_pk_field(self, simple_model):
         field = simple_model._doc_type.mapping['name']
         field._primary_key = True
         assert simple_model.pk_field() == 'name'
+
+    def test_pk_field_type(self, simple_model):
+        from nefertari_es.fields import StringField
+        field = simple_model._doc_type.mapping['name']
+        field._primary_key = True
+        assert simple_model.pk_field_type() is StringField
 
     def test_get_item_found(self, simple_model):
         simple_model.get_collection = Mock(return_value=['one', 'two'])
@@ -151,7 +295,7 @@ class TestBaseDocument(object):
         item = simple_model(name='first', price=2)
         simple_model._update_many([item], {'name': 'second'})
         mock_bulk.assert_called_once_with(
-            [{'doc': {'name': 'second'}, '_type': 'item'}],
+            [{'doc': {'name': 'second'}, '_type': 'Item'}],
             item.connection, op_type='update', request=None)
 
     @patch('nefertari_es.documents._bulk')
@@ -159,15 +303,22 @@ class TestBaseDocument(object):
         item = simple_model(name='first', price=2)
         simple_model._delete_many([item])
         mock_bulk.assert_called_once_with(
-            [{'_type': 'item', '_source': {'price': 2, 'name': 'first'}}],
+            [{'_type': 'Item', '_source': {'price': 2, 'name': 'first'}}],
             item.connection, op_type='delete', request=None)
 
-    def test_to_dict(self, simple_model):
-        item = simple_model(name='joe', price=42)
-        assert item.to_dict() == {'name': 'joe', 'price': 42}
-        assert item.to_dict(include_meta=True) == {
-            '_source': {'name': 'joe', 'price': 42}, '_type': 'item'
-            }
+    def test_get_field_params(self, story_model):
+        assert story_model.get_field_params('name') == {
+            'primary_key': True}
+        assert story_model.get_field_params('author') == {
+            'backref_name': 'story',
+            'document_type': 'Person',
+            'uselist': False}
+
+    def test_fields_to_query(self, simple_model):
+        assert set(simple_model.fields_to_query()) == {
+            '_id', 'name', 'price'}
+
+
 
 class TestHelpers(object):
     @patch('nefertari_es.documents._validate_fields')

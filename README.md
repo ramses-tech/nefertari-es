@@ -2,17 +2,6 @@
 
 Backend and search engine for Nefertari
 
-## TODO
-
-Some issues to get basic engine working
-
-- Finish implementing relationship fields.
-
-  - Rework objects dumping for response in to_dict
-
-- Tests - we need test relationship fields.
-
-
 Next tasks:
 
 - Docstrings

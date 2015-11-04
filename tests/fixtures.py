@@ -23,7 +23,7 @@ class FakeConnection(object):
 @pytest.fixture
 def simple_model(request):
     class Item(BaseDocument):
-        name = StringField(primary_key=True)
+        name = StringField(primary_key=True, required=True)
         price = IntegerField()
         connection = property(Mock())
     return Item

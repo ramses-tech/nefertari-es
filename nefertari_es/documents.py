@@ -236,7 +236,15 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
     def to_dict(self, include_meta=False, _keys=None, request=None,
                 _depth=None):
-
+        """
+        DocType and nefertari both expect a to_dict method, but
+        they expect it to act differently. DocType uses to_dict for
+        serialize for saving to es. nefertari uses it to serialize
+        for serving JSON to the client. For now we differentiate by
+        looking for a request argument. If it's present we assume
+        that we're serving JSON to the client, otherwise we assume
+        that we're saving to es
+        """
         if _depth is None:
             _depth = self._nesting_depth
         depth_reached = _depth is not None and _depth <= 0
@@ -251,7 +259,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
                 self._unload_related(name)
                 continue
 
-            self._load_related(name)
+            # Related document is implicitly loaded on __getattr__
             value = getattr(self, name)
             if value:
                 if not isinstance(value, (list, AttrList)):
@@ -262,15 +270,9 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
 
-        # DocType and nefertari both expect a to_dict method, but
-        # they expect it to act differently. DocType uses to_dict for
-        # serialize for saving to es. nefertari uses it to serialize
-        # for serving JSON to the client. For now we differentiate by
-        # looking for a request argument. If it's present we assume
-        # that we're serving JSON to the client, otherwise we assume
-        # that we're saving to es
-        if request is not None:
+        if request is not None or include_meta:
             data['_type'] = self.__class__.__name__
+        if request is not None:
             data['_pk'] = str(getattr(self, self.pk_field()))
         return data
 
@@ -473,9 +475,9 @@ class BaseDocument(SyncRelatedMixin, DocType):
         return hits
 
     @classmethod
-    def get_field_params(cls, field):
-        # XXX - seems to be used to provide field init kw args
-        return None
+    def get_field_params(cls, field_name):
+        field = cls._doc_type.mapping[field_name]
+        return getattr(field, '_init_kwargs', None)
 
     @classmethod
     def fields_to_query(cls):
