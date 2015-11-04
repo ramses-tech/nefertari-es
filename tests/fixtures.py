@@ -53,7 +53,8 @@ def story_model(person_model, tag_model):
             backref_name='story')
         tags = Relationship(
             document_type='Tag', uselist=True,
-            backref_name='stories')
+            backref_name='stories',
+            backref_uselist=True)
     return Story
 
 

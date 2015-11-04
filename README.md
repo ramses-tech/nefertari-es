@@ -2,6 +2,11 @@
 
 Backend and search engine for Nefertari
 
+TODO:
+
+- Backref sync doesn't work when item is created with relationship field value.
+
+
 Next tasks:
 
 - Docstrings

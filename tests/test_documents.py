@@ -584,3 +584,71 @@ class TestSyncRelatedMixin(object):
         story = story_model(name='foo', author=1)
         docs.SyncRelatedMixin._deletion_hook(story, 3, 'author')
         assert not story.update.called
+
+
+@patch('nefertari_es.documents.DocType.save')
+class TestRelationsSyncFunctional(object):
+    def _test_data(self, person_model, tag_model, story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        story = story_model(name='11/22/63')
+        story.author = sking
+        story.tags = [novel]
+        with patch('nefertari_es.documents.DocType.save') as mock_save:
+            story.save()
+        return sking, novel, story
+
+    def test_sync_on_creation(
+            self, mock_save, person_model, tag_model, story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        story = story_model(name='11/22/63', author=sking, tags=[novel])
+        assert sking.story is None
+        assert novel.stories == []
+        story.save()
+
+        assert sking.story == story
+        assert len(novel.stories) == 1
+        assert story in novel.stories
+
+    def test_multifield_added_new_value(
+            self, mock_save, person_model, tag_model, story_model):
+        sking, novel, story = self._test_data(
+            person_model, tag_model, story_model)
+        fiction = tag_model(name='fiction')
+        story.tags = [fiction, novel]
+        assert fiction.stories == []
+        story.save()
+        assert len(fiction.stories) == 1
+        assert story in fiction.stories
+
+    def test_multifield_deleted_old_value(
+            self, mock_save, person_model, tag_model, story_model):
+        sking, novel, story = self._test_data(
+            person_model, tag_model, story_model)
+        story.tags = []
+        assert len(novel.stories) == 1
+        assert story in novel.stories
+        story.save()
+        assert novel.stories == []
+
+    def test_singlefield_changed_value(
+            self, mock_save, person_model, tag_model, story_model):
+        sking, novel, story = self._test_data(
+            person_model, tag_model, story_model)
+        jdoe = person_model(name='John Doe')
+        story.author = jdoe
+        assert jdoe.story is None
+        assert sking.story == story
+        story.save()
+        assert jdoe.story == story
+        assert sking.story is None
+
+    def test_singlefield_deleted_value(
+            self, mock_save, person_model, tag_model, story_model):
+        sking, novel, story = self._test_data(
+            person_model, tag_model, story_model)
+        story.author = None
+        assert sking.story == story
+        story.save()
+        assert sking.story is None
