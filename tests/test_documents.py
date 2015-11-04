@@ -652,3 +652,42 @@ class TestRelationsSyncFunctional(object):
         assert sking.story == story
         story.save()
         assert sking.story is None
+
+    def test_one_to_many_changes_on_many_side(
+            self, mock_save, person_model, parent_model):
+        person1 = person_model(name='person1')
+        person2 = person_model(name='person2')
+        parent = parent_model(name='parent')
+        assert parent.children == []
+        person1.parent = parent
+        person1.save()
+        assert len(parent.children) == 1
+        assert person1 in parent.children
+        person2.parent = parent
+        person2.save()
+        assert len(parent.children) == 2
+        assert person2 in parent.children
+        assert person1 in parent.children
+        person1.parent = None
+        person1.save()
+        assert len(parent.children) == 1
+        assert person2 in parent.children
+
+    def test_one_to_many_changes_on_one_side(
+            self, mock_save, person_model, parent_model):
+        person1 = person_model(name='person1')
+        person2 = person_model(name='person2')
+        parent = parent_model(name='parent')
+        assert person1.parent is None
+        assert person2.parent is None
+        parent.children = [person1]
+        parent.save()
+        assert person1.parent == parent
+        parent.children = [person2]
+        parent.save()
+        assert person1.parent is None
+        assert person2.parent == parent
+        parent.children = []
+        parent.save()
+        assert person1.parent is None
+        assert person2.parent is None
