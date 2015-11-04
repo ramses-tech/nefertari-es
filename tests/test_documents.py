@@ -344,6 +344,11 @@ class TestHelpers(object):
         cleaned = docs._cleaned_query_params(simple_model, params, False)
         assert cleaned == {'name': 'user12'}
 
+    def test_restructure_params(self, id_model):
+        params = {'id': 'foo', 'name': 1}
+        assert docs._restructure_params(id_model, params) == {
+            '_id': ['foo'], 'name': [1]}
+
     def test_validate_fields_valid(self, simple_model):
         try:
             docs._validate_fields(simple_model, ['name', 'price'])
@@ -444,3 +449,138 @@ class TestGetCollection(object):
         mock_search().sort.assert_called_once_with(
             'name', '-price')
         assert result == mock_search().sort().execute().hits
+
+
+class TestSyncRelatedMixin(object):
+    def test_mixin_included_in_doc(self):
+        assert docs.SyncRelatedMixin in docs.BaseDocument.__mro__
+
+    def test_setattr(self, story_model):
+        item = story_model()
+        item._load_related = Mock()
+        item._sync_related = Mock()
+        item.author = 1
+        item._load_related.assert_called_once_with('author')
+        item._sync_related.assert_called_once_with(
+            new_value=1, old_value=None, field_name='author')
+
+    def test_sync_related_multiple_items(self, story_model):
+        story = story_model(name='11/22/63')
+        story._register_addition_hook = Mock()
+        story._register_deletion_hook = Mock()
+        story._sync_related([1, 2], [2, 3], 'tags')
+        story._register_addition_hook.assert_called_once_with(
+            1, 'stories')
+        story._register_deletion_hook.assert_called_once_with(
+            3, 'stories')
+
+    def test_sync_related_one_item(self, story_model):
+        story = story_model(name='11/22/63')
+        story._register_addition_hook = Mock()
+        story._register_deletion_hook = Mock()
+        story._sync_related(1, 3, 'tags')
+        story._register_addition_hook.assert_called_once_with(
+            1, 'stories')
+        story._register_deletion_hook.assert_called_once_with(
+            3, 'stories')
+
+    def test_sync_related_not_changed(self, story_model):
+        story = story_model(name='11/22/63')
+        story._register_addition_hook = Mock()
+        story._register_deletion_hook = Mock()
+        story._sync_related([1], [1], 'tags')
+        assert not story._register_addition_hook.called
+        assert not story._register_deletion_hook.called
+        story._sync_related(1, 1, 'tags')
+        assert not story._register_addition_hook.called
+        assert not story._register_deletion_hook.called
+
+    @patch('nefertari_es.documents.partial')
+    def test_register_addition_hook(self, mock_partial, simple_model):
+        obj = simple_model()
+        assert len(obj._backref_hooks) == 0
+        obj._register_addition_hook(1, 2)
+        mock_partial.assert_called_once_with(
+            simple_model._addition_hook,
+            _item=1,
+            _add_item=obj,
+            _field_name=2)
+        assert mock_partial() in obj._backref_hooks
+        assert len(obj._backref_hooks) == 1
+
+    @patch('nefertari_es.documents.partial')
+    def test_register_deletion_hook(self, mock_partial, simple_model):
+        obj = simple_model()
+        assert len(obj._backref_hooks) == 0
+        obj._register_deletion_hook(1, 2)
+        mock_partial.assert_called_once_with(
+            simple_model._deletion_hook,
+            _item=1,
+            _del_item=obj,
+            _field_name=2)
+        assert mock_partial() in obj._backref_hooks
+        assert len(obj._backref_hooks) == 1
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_addition_hook_multi_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', tags=[1, 2])
+        docs.SyncRelatedMixin._addition_hook(story, 3, 'tags')
+        story.update.assert_called_once_with({'tags': [1, 2, 3]})
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_addition_hook_multi_not_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', tags=[1, 2])
+        docs.SyncRelatedMixin._addition_hook(story, 1, 'tags')
+        assert not story.update.called
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_addition_hook_single_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', author=1)
+        docs.SyncRelatedMixin._addition_hook(story, 3, 'author')
+        story.update.assert_called_once_with({'author': 3})
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_addition_hook_single_not_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', author=1)
+        docs.SyncRelatedMixin._addition_hook(story, 1, 'author')
+        assert not story.update.called
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_deletion_hook_multi_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', tags=[1, 2])
+        docs.SyncRelatedMixin._deletion_hook(story, 1, 'tags')
+        story.update.assert_called_once_with({'tags': [2]})
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_deletion_hook_multi_not_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', tags=[1, 2])
+        docs.SyncRelatedMixin._deletion_hook(story, 3, 'tags')
+        assert not story.update.called
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_deletion_hook_single_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', author=1)
+        docs.SyncRelatedMixin._deletion_hook(story, 1, 'author')
+        story.update.assert_called_once_with({'author': None})
+
+    @patch('nefertari_es.documents.BaseDocument._load_related')
+    @patch('nefertari_es.documents.BaseDocument.update')
+    def test_deletion_hook_single_not_changed(
+            self, mock_upd, mock_load, story_model):
+        story = story_model(name='foo', author=1)
+        docs.SyncRelatedMixin._deletion_hook(story, 3, 'author')
+        assert not story.update.called

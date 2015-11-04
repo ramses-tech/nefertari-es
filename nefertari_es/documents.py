@@ -4,7 +4,7 @@ from six import (
     add_metaclass,
 )
 from elasticsearch_dsl import DocType
-from elasticsearch_dsl.utils import AttrList, AttrDict
+from elasticsearch_dsl.utils import AttrList
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
@@ -52,60 +52,60 @@ class SyncRelatedMixin(object):
             for val in deleted_values:
                 self._register_deletion_hook(val, field._back_populates)
 
+    @staticmethod
+    def _addition_hook(_item, _add_item, _field_name):
+        field = _item._doc_type.mapping[_field_name]
+        curr_val = getattr(_item, _field_name, None)
+        if field._multi:
+            new_val = list(curr_val or [])
+            if _add_item not in new_val:
+                new_val.append(_add_item)
+        else:
+            new_val = (_add_item if _add_item != curr_val
+                       else curr_val)
+
+        value_changed = (
+            (field._multi and set(curr_val or []) != set(new_val)) or
+            (not field._multi and curr_val != new_val))
+        if value_changed:
+            _item.update({_field_name: new_val})
+
     def _register_addition_hook(self, item, field_name):
         """ Register hook to add `self` to `item` field `field_name`. """
-
-        def _add_hook(_item, _add_item, _field_name):
-            field = _item._doc_type.mapping[_field_name]
-            curr_val = getattr(_item, _field_name, None)
-            if field._multi:
-                new_val = list(curr_val or [])
-                if _add_item not in new_val:
-                    new_val.append(_add_item)
-            else:
-                new_val = (_add_item if _add_item != curr_val
-                           else curr_val)
-
-            value_changed = (
-                (field._multi and set(curr_val or []) != set(new_val)) or
-                (not field._multi and curr_val != new_val))
-            if value_changed:
-                _item.update({_field_name: new_val})
-
         _hook = partial(
-            _add_hook,
+            self.__class__._addition_hook,
             _item=item,
             _add_item=self,
             _field_name=field_name)
         self._backref_hooks += (_hook,)
 
+    @staticmethod
+    def _deletion_hook(_item, _del_item, _field_name):
+        curr_val = getattr(_item, _field_name, None)
+        if not curr_val:
+            return
+
+        field = _item._doc_type.mapping[_field_name]
+        if field._multi:
+            new_val = list(curr_val or [])
+            if _del_item in new_val:
+                new_val.remove(_del_item)
+        else:
+            new_val = (None if _del_item == curr_val
+                       else curr_val)
+
+        value_changed = (
+            (field._multi and set(curr_val or []) != set(new_val)) or
+            (not field._multi and curr_val != new_val))
+        if value_changed:
+            _item.update({_field_name: new_val})
+
     def _register_deletion_hook(self, item, field_name):
         """ Register hook to delete `self` from `item` field
         `field_name`.
         """
-
-        def _del_hook(_item, _del_item, _field_name):
-            curr_val = getattr(_item, _field_name, None)
-            if not curr_val:
-                return
-
-            field = _item._doc_type.mapping[_field_name]
-            if field._multi:
-                new_val = list(curr_val or [])
-                if _del_item in new_val:
-                    new_val.remove(_del_item)
-            else:
-                new_val = (None if _del_item == curr_val
-                           else curr_val)
-
-            value_changed = (
-                (field._multi and set(curr_val or []) != set(new_val)) or
-                (not field._multi and curr_val != new_val))
-            if value_changed:
-                _item.update({_field_name: new_val})
-
         _hook = partial(
-            _del_hook,
+            self.__class__._deletion_hook,
             _item=item,
             _del_item=self,
             _field_name=field_name)

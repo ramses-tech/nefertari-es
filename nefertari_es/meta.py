@@ -1,5 +1,3 @@
-from weakref import WeakValueDictionary
-
 from elasticsearch_dsl import Index
 from elasticsearch_dsl.document import DocTypeMeta
 

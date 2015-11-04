@@ -1,11 +1,7 @@
 import datetime
 from dateutil import parser
 
-import six
-from elasticsearch_dsl import (
-    field,
-    DocType,
-    )
+from elasticsearch_dsl import field
 from elasticsearch_dsl.exceptions import ValidationException
 from elasticsearch_dsl.utils import AttrList, AttrDict
 
