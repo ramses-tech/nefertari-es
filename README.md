@@ -2,13 +2,26 @@
 
 Backend and search engine for Nefertari
 
+TODO:
+
+- Try to move existing es integration out of nefertari (and other engines)
+  into es engine
+
+- Add naive versions of missing fields: ChoiceField, PickleField, ForeignKeyField,
+  ListField. E.g. If ListField "groups" in nef-example has strings, should
+  nefertari-es ListField only support strings?
+
+- Authentication
+
+- Both ramses- and nefertari- examples default branches should work with
+  nerfertari-es
+
+- Mock data should load properly
+
 
 Next tasks:
 
 - Docstrings
-
-- Move existing es integration out of nefertari (and other engines)
-  into es engine
 
 - Need a way to generate an es model or mapping given an sql or mongo
   model. this shouldn't be too hard, since the field names are mostly

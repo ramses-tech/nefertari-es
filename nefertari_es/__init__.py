@@ -5,6 +5,7 @@ from nefertari.utils import (
     )
 from .documents import BaseDocument
 from .serializers import JSONSerializer
+from .connections import ESHttpConnection
 from .meta import (
     get_document_cls,
     get_document_classes,
@@ -85,7 +86,9 @@ def setup_database(config):
     # about es - they should just know how to serialize their
     # documents to JSON.
     conn = connections.create_connection(
-        serializer=JSONSerializer(), **params)
+        serializer=JSONSerializer(),
+        connection_class=ESHttpConnection,
+        **params)
     setup_index(conn, settings)
 
 
