@@ -3,7 +3,7 @@ from mock import Mock, patch
 
 import pytest
 from elasticsearch_dsl.exceptions import ValidationException
-from elasticsearch_dsl.utils import AttrList, AttrDict
+from elasticsearch_dsl.utils import AttrList
 
 from nefertari_es import fields
 from .fixtures import (
@@ -13,6 +13,7 @@ from .fixtures import (
     person_model,
     parent_model,
 )
+
 
 class TestFieldHelpers(object):
 
@@ -39,6 +40,17 @@ class TestFields(object):
         field = DummyField(primary_key=True)
         assert field._primary_key
         assert field.required
+
+    def test_drop_invalid_kwargs(self):
+        class DummyBase(object):
+            pass
+
+        class DummyField(fields.BaseFieldMixin, DummyBase):
+            _valid_kwargs = ('foo',)
+
+        field = DummyField()
+        assert field.drop_invalid_kwargs({'foo': 1, 'bar': 2}) == {
+            'foo': 1}
 
     def test_idfield(self):
         field = fields.IdField()
@@ -174,6 +186,12 @@ class TestReferenceField(object):
         assert field._doc_class_name == 'Foo'
         assert not field._multi
         assert field._backref_kwargs == {'name': 'zoo'}
+
+    def test_drop_invalid_kwargs(self):
+        field = self._get_field()
+        kwargs = {'required': True, 'backref_required': True, 'Foo': 1}
+        assert field.drop_invalid_kwargs(kwargs) == {
+            'required': True, 'backref_required': True}
 
     @patch('nefertari_es.meta.get_document_cls')
     def test_doc_class(self, mock_get):

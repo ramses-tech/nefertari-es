@@ -4,10 +4,6 @@ Backend and search engine for Nefertari
 
 TODO:
 
-- Add naive versions of missing fields: ChoiceField, PickleField,
-  ForeignKeyField, ListField. E.g. If ListField "groups" in nef-example
-  has strings, should nefertari-es ListField only support strings?
-
 - Authentication
 
 - Both ramses- and nefertari- examples default branches should work with
