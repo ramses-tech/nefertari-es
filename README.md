@@ -4,9 +4,6 @@ Backend and search engine for Nefertari
 
 TODO:
 
-- Try to move existing es integration out of nefertari (and other engines)
-  into es engine
-
 - Add naive versions of missing fields: ChoiceField, PickleField,
   ForeignKeyField, ListField. E.g. If ListField "groups" in nef-example
   has strings, should nefertari-es ListField only support strings?
