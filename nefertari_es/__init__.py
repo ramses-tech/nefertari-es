@@ -1,4 +1,6 @@
-from elasticsearch_dsl.connections import connections
+from __future__ import absolute_import
+
+from elasticsearch_dsl.connections import connections as es_connections
 from nefertari.utils import (
     dictset,
     split_strip,
@@ -85,7 +87,7 @@ def setup_database(config):
     # lots of repeated code, plus other engines shouldn't have to know
     # about es - they should just know how to serialize their
     # documents to JSON.
-    conn = connections.create_connection(
+    conn = es_connections.create_connection(
         serializer=JSONSerializer(),
         connection_class=ESHttpConnection,
         **params)
@@ -93,8 +95,13 @@ def setup_database(config):
 
 
 def setup_index(conn, settings):
+    from nefertari.json_httpexceptions import JHTTPNotFound
     index_name = settings['index_name']
-    if not conn.indices.exists([index_name]):
+    try:
+        index_exists = conn.indices.exists([index_name])
+    except JHTTPNotFound:
+        index_exists = False
+    if not index_exists:
         create_index(index_name)
     else:
         for doc_cls in get_document_classes().values():

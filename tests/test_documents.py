@@ -307,6 +307,12 @@ class TestBaseDocument(object):
             [{'_type': 'Item', '_source': {'price': 2, 'name': 'first'}}],
             item.connection, op_type='delete', request=None)
 
+    @patch('nefertari_es.documents.BaseDocument.get_collection')
+    def test_get_by_ids(self, mock_get, simple_model):
+        result = simple_model.get_by_ids([1, 2, 3], foo='bar')
+        mock_get.assert_called_once_with(name=[1, 2, 3], foo='bar')
+        assert result == mock_get()
+
     def test_get_field_params(self, story_model):
         assert story_model.get_field_params('name') == {
             'primary_key': True}

@@ -492,6 +492,11 @@ class BaseDocument(SyncRelatedMixin, DocType):
         return hits
 
     @classmethod
+    def get_by_ids(cls, ids, **params):
+        params[cls.pk_field()] = ids
+        return cls.get_collection(**params)
+
+    @classmethod
     def get_field_params(cls, field_name):
         field = cls._doc_type.mapping[field_name]
         return getattr(field, '_init_kwargs', None)

@@ -10,10 +10,6 @@ from nefertari.json_httpexceptions import exception_response
 log = logging.getLogger(__name__)
 
 
-class IndexNotFoundException(Exception):
-    pass
-
-
 class ESHttpConnection(elasticsearch.Urllib3HttpConnection):
     def _catch_index_error(self, response):
         """ Catch and raise index errors which are not critical and thus
@@ -43,8 +39,6 @@ class ESHttpConnection(elasticsearch.Urllib3HttpConnection):
         except Exception as e:
             log.error(e.error)
             status_code = e.status_code
-            if status_code == 404 and 'IndexMissingException' in e.error:
-                raise IndexNotFoundException()
             if status_code == 'N/A':
                 status_code = 400
             raise exception_response(

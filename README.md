@@ -7,9 +7,9 @@ TODO:
 - Try to move existing es integration out of nefertari (and other engines)
   into es engine
 
-- Add naive versions of missing fields: ChoiceField, PickleField, ForeignKeyField,
-  ListField. E.g. If ListField "groups" in nef-example has strings, should
-  nefertari-es ListField only support strings?
+- Add naive versions of missing fields: ChoiceField, PickleField,
+  ForeignKeyField, ListField. E.g. If ListField "groups" in nef-example
+  has strings, should nefertari-es ListField only support strings?
 
 - Authentication
 
@@ -22,6 +22,19 @@ TODO:
 Next tasks:
 
 - Docstrings
+
+- Support 'body' param in ES queries?
+
+- Aggregations
+
+- Multi-collection requests
+
+- Perform bulk operations in chunks
+
+- Use elasticsearch.enable_refresh_query setting
+
+- Rework es.py script in nefertari to work with nefertari-es (indexing
+  all documents and missing documents)
 
 - Need a way to generate an es model or mapping given an sql or mongo
   model. this shouldn't be too hard, since the field names are mostly
