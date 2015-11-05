@@ -2,10 +2,6 @@
 
 Backend and search engine for Nefertari
 
-TODO:
-
-- Backref sync doesn't work when item is created with relationship field value.
-
 
 Next tasks:
 
@@ -39,3 +35,5 @@ Advanced tasks:
 - Make relationships sync work on _update_many/_delete_many
 
 - Caching of loaded ES documents
+
+- Unique constraint on PK fields?

@@ -62,8 +62,9 @@ class TestBaseDocument(object):
     @patch('nefertari_es.documents.BaseDocument._load_related')
     def test_getattr_raw(self, mock_load, story_model):
         story = story_model(author=1)
+        assert mock_load.call_count == 1
         assert story._getattr_raw('author') == 1
-        assert not mock_load.called
+        assert mock_load.call_count == 1
 
     @patch('nefertari_es.documents.BaseDocument._load_related')
     def test_unload_related(self, mock_load, parent_model, person_model):
@@ -598,19 +599,6 @@ class TestRelationsSyncFunctional(object):
             story.save()
         return sking, novel, story
 
-    def test_sync_on_creation(
-            self, mock_save, person_model, tag_model, story_model):
-        sking = person_model(name='Stephen King')
-        novel = tag_model(name='novel')
-        story = story_model(name='11/22/63', author=sking, tags=[novel])
-        assert sking.story is None
-        assert novel.stories == []
-        story.save()
-
-        assert sking.story == story
-        assert len(novel.stories) == 1
-        assert story in novel.stories
-
     def test_multifield_added_new_value(
             self, mock_save, person_model, tag_model, story_model):
         sking, novel, story = self._test_data(
@@ -691,3 +679,17 @@ class TestRelationsSyncFunctional(object):
         parent.save()
         assert person1.parent is None
         assert person2.parent is None
+
+    def test_sync_on_creation(
+            self, mock_save, person_model, tag_model,
+            story_model):
+        sking = person_model(name='Stephen King')
+        novel = tag_model(name='novel')
+        story = story_model(name='11/22/63', author=sking, tags=[novel])
+        assert sking.story is None
+        assert novel.stories == []
+        story.save()
+
+        assert sking.story == story
+        assert len(novel.stories) == 1
+        assert story in novel.stories

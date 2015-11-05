@@ -5,6 +5,11 @@ from elasticsearch_dsl import field
 from elasticsearch_dsl.exceptions import ValidationException
 from elasticsearch_dsl.utils import AttrList, AttrDict
 
+# ChoiceField
+# PickleField
+# ForeignKeyField
+# ListField
+
 
 class CustomMappingMixin(object):
     """ Mixin that allows to define custom ES field mapping.

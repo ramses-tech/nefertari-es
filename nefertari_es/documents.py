@@ -23,6 +23,20 @@ from .fields import ReferenceField, IdField
 class SyncRelatedMixin(object):
     _backref_hooks = ()
 
+    def __init__(self, *args, **kwargs):
+        created = 'meta' not in kwargs
+        super(SyncRelatedMixin, self).__init__(*args, **kwargs)
+        if not created:
+            return
+        for field_name in self._relationships():
+            if field_name not in kwargs:
+                continue
+            new_value = kwargs[field_name]
+            if new_value not in ([], {}, None):
+                field_obj = self._doc_type.mapping[field_name]
+                self._d_[field_name] = field_obj.empty()
+                setattr(self, field_name, new_value)
+
     def __setattr__(self, name, value):
         if name in self._relationships():
             self._load_related(name)
@@ -153,7 +167,10 @@ class BaseDocument(SyncRelatedMixin, DocType):
         pk_field = self.pk_field()
         pk = getattr(self, pk_field, None)
         if pk is None:
-            return None
+            self._sync_id_field()
+            pk = getattr(self, pk_field, None)
+            if pk is None:
+                return None
 
         def _hasher():
             cls_name = self.__class__.__name__
