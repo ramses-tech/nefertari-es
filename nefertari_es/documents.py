@@ -1,10 +1,12 @@
 from functools import partial
+import copy
 
 from six import (
     add_metaclass,
 )
 from elasticsearch_dsl import DocType
 from elasticsearch_dsl.utils import AttrList
+from elasticsearch_dsl.field import InnerObjectWrapper
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
@@ -17,16 +19,17 @@ from nefertari.utils import (
     split_strip,
 )
 from .meta import BackrefGeneratingDocMeta
-from .fields import ReferenceField, IdField
+from .fields import ReferenceField, IdField, DictField, ListField
 
 
 class SyncRelatedMixin(object):
     _backref_hooks = ()
+    _created = False
 
     def __init__(self, *args, **kwargs):
-        created = 'meta' not in kwargs
+        _created = 'meta' not in kwargs
         super(SyncRelatedMixin, self).__init__(*args, **kwargs)
-        if not created:
+        if not _created:
             return
         for field_name in self._relationships():
             if field_name not in kwargs:
@@ -36,6 +39,7 @@ class SyncRelatedMixin(object):
                 field_obj = self._doc_type.mapping[field_name]
                 self._d_[field_name] = field_obj.empty()
                 setattr(self, field_name, new_value)
+        self._created = _created
 
     def __setattr__(self, name, value):
         if name in self._relationships():
@@ -197,6 +201,17 @@ class BaseDocument(SyncRelatedMixin, DocType):
             self._load_related(name)
         return super(BaseDocument, self).__getattr__(name)
 
+    def __repr__(self):
+        parts = ['%s:' % self.__class__.__name__]
+
+        pk_field = self.pk_field()
+        parts.append('{}={}'.format(pk_field, getattr(self, pk_field)))
+
+        if hasattr(self, '_version'):
+            parts.append('v=%s' % self._version)
+
+        return '<%s>' % ', '.join(parts)
+
     def _getattr_raw(self, name):
         return self._d_[name]
 
@@ -242,10 +257,20 @@ class BaseDocument(SyncRelatedMixin, DocType):
         process_bools(params)
         _validate_fields(self.__class__, params.keys())
         pk_field = self.pk_field()
+
+        iter_types = (DictField, ListField)
+        iter_fields = [
+            field for field in self._doc_type.mapping
+            if isinstance(self._doc_type.mapping[field], iter_types)]
+
         for key, value in params.items():
             if key == pk_field:
                 continue
-            setattr(self, key, value)
+            if key in iter_fields:
+                self.update_iterables(value, key, unique=True, save=False)
+            else:
+                setattr(self, key, value)
+
         return self.save(**kw)
 
     def delete(self, request=None):
@@ -504,6 +529,139 @@ class BaseDocument(SyncRelatedMixin, DocType):
     @classmethod
     def fields_to_query(cls):
         return set(cls._doc_type.mapping).union({'_id'})
+
+    @classmethod
+    def count(cls, query_set):
+        try:
+            return query_set.count()
+        except AttributeError:
+            return len(query_set)
+
+    @classmethod
+    def has_field(cls, field):
+        return field in cls._doc_type.mapping
+
+    @classmethod
+    def get_or_create(cls, **params):
+        pass
+        # defaults = params.pop('defaults', {})
+        # try:
+        #     return cls.objects.get(**params), False
+        # except mongo.queryset.DoesNotExist:
+        #     defaults.update(params)
+        #     return cls(**defaults).save(), True
+        # except mongo.queryset.MultipleObjectsReturned:
+        #     raise JHTTPBadRequest('Bad or Insufficient Params')
+
+    @classmethod
+    def get_null_values(cls):
+        pass
+        # """ Get null values of :cls: fields. """
+        # skip_fields = {'_version', '_acl'}
+        # null_values = {}
+        # for name in cls._fields.keys():
+        #     if name in skip_fields:
+        #         continue
+        #     field = getattr(cls, name)
+        #     if isinstance(field, RelationshipField):
+        #         value = []
+        #     else:
+        #         value = None
+        #     null_values[name] = value
+        # null_values.pop('id', None)
+        # return null_values
+
+    def update_iterables(self, params, attr, unique=False,
+                         value_type=None, save=True,
+                         request=None):
+        field = self._doc_type.mapping[attr]
+        is_dict = isinstance(field, DictField)
+        is_list = isinstance(field, ListField)
+
+        def split_keys(keys):
+            neg_keys = []
+            pos_keys = []
+
+            for key in keys:
+                if key.startswith('__'):
+                    continue
+                if key.startswith('-'):
+                    neg_keys.append(key[1:])
+                else:
+                    pos_keys.append(key.strip())
+            return pos_keys, neg_keys
+
+        def update_dict(update_params):
+            final_value = getattr(self, attr, {}) or {}
+            if isinstance(final_value, InnerObjectWrapper):
+                final_value = final_value.to_dict()
+            else:
+                final_value = final_value.copy()
+
+            if update_params is None or update_params == '':
+                if not final_value:
+                    return
+                update_params = {
+                    '-' + key: val for key, val in final_value.items()}
+            positive, negative = split_keys(list(update_params.keys()))
+
+            # Pop negative keys
+            for key in negative:
+                final_value.pop(key, None)
+
+            # Set positive keys
+            for key in positive:
+                final_value[str(key)] = update_params[key]
+
+            setattr(self, attr, final_value)
+            if save:
+                self.save(request)
+
+        def update_list(update_params):
+            final_value = getattr(self, attr, []) or []
+            final_value = list(final_value)
+            final_value = copy.deepcopy(final_value)
+            if update_params is None or update_params == '':
+                if not final_value:
+                    return
+                update_params = ['-' + val for val in final_value]
+            if isinstance(update_params, dict):
+                keys = list(update_params.keys())
+            else:
+                keys = update_params
+
+            positive, negative = split_keys(keys)
+
+            if not (positive + negative):
+                raise JHTTPBadRequest('Missing params')
+
+            if positive:
+                if unique:
+                    positive = [v for v in positive if v not in final_value]
+                final_value += positive
+
+            if negative:
+                final_value = list(set(final_value) - set(negative))
+
+            setattr(self, attr, final_value)
+            if save:
+                self.save(request)
+
+        if is_dict:
+            update_dict(params)
+
+        elif is_list:
+            update_list(params)
+
+    def _is_modified(self):
+        """ Determine if instance is modified.
+
+        TODO: Rework to make the check more sane.
+        """
+        return not self._is_created()
+
+    def _is_created(self):
+        return self._created
 
 
 def _cleaned_query_params(cls, params, strict):

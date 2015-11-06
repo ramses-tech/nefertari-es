@@ -4,7 +4,7 @@ from elasticsearch_dsl.connections import connections as es_connections
 from nefertari.utils import (
     dictset,
     split_strip,
-    )
+)
 from .documents import BaseDocument
 from .serializers import JSONSerializer
 from .connections import ESHttpConnection
@@ -12,7 +12,7 @@ from .meta import (
     get_document_cls,
     get_document_classes,
     create_index,
-    )
+)
 from .fields import (
     IdField,
     IntervalField,
@@ -33,7 +33,12 @@ from .fields import (
     DecimalField,
     ReferenceField,
     Relationship,
-    )
+
+    ListField,
+    ForeignKeyField,
+    ChoiceField,
+    PickleField,
+)
 
 
 __all__ = [
@@ -62,7 +67,12 @@ __all__ = [
     'get_document_classes',
     'is_relationship_field',
     'get_relationship_cls',
-    ]
+
+    'ListField',
+    'ForeignKeyField',
+    'ChoiceField',
+    'PickleField',
+]
 
 
 def includeme(config):

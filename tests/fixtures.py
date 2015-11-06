@@ -49,10 +49,10 @@ def story_model(person_model, tag_model):
     class Story(BaseDocument):
         name = StringField(primary_key=True)
         author = Relationship(
-            document_type='Person', uselist=False,
+            document='Person', uselist=False,
             backref_name='story')
         tags = Relationship(
-            document_type='Tag', uselist=True,
+            document='Tag', uselist=True,
             backref_name='stories',
             backref_uselist=True)
     return Story
@@ -71,7 +71,7 @@ def parent_model(person_model):
     class Parent(FakeConnection, BaseDocument):
         name = StringField(primary_key=True)
         children = Relationship(
-            document_type='Person',
+            document='Person',
             uselist=True,
             backref_name='parent')
     return Parent

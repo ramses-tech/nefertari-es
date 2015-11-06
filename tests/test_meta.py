@@ -63,7 +63,7 @@ class TestBackrefGeneratingDocMeta(object):
         class Story(documents.BaseDocument):
             name = fields.StringField(primary_key=True)
             tags = fields.Relationship(
-                document_type='Tag', uselist=True,
+                document='Tag', uselist=True,
                 backref_name='stories')
 
         tag_stories = Tag._doc_type.mapping['stories']

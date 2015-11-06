@@ -9,6 +9,7 @@ from .fixtures import (
     simple_model, id_model, story_model, person_model,
     tag_model, parent_model)
 from nefertari_es import documents as docs
+from nefertari_es import fields
 
 
 class TestBaseDocument(object):
@@ -135,6 +136,18 @@ class TestBaseDocument(object):
         assert item.name == 'foo'
         assert item.price == 321
         item.save.assert_called_once_with(zoo=1)
+
+    def test_update(self):
+        class MyModel(docs.BaseDocument):
+            id = fields.IdField(primary_key=True)
+            name = fields.StringField()
+            settings = fields.DictField()
+        MyModel.save = Mock()
+
+        myobj = MyModel(id=4, name='foo')
+        myobj.update({'name': 'bar', 'settings': {'sett1': 'val1'}})
+        assert myobj.name == 'bar'
+        assert myobj.settings == {'sett1': 'val1'}
 
     def test_to_dict(self, simple_model):
         item = simple_model(name='joe', price=42)
@@ -318,12 +331,82 @@ class TestBaseDocument(object):
             'primary_key': True}
         assert story_model.get_field_params('author') == {
             'backref_name': 'story',
-            'document_type': 'Person',
+            'document': 'Person',
             'uselist': False}
 
     def test_fields_to_query(self, simple_model):
         assert set(simple_model.fields_to_query()) == {
             '_id', 'name', 'price'}
+
+    @patch('nefertari_es.documents.BaseDocument.save')
+    def test_update_iterables_dict(self, mock_save):
+        class MyModel(docs.BaseDocument):
+            id = fields.IdField(primary_key=True)
+            settings = fields.DictField()
+        myobj = MyModel(id=1)
+
+        # No existing value
+        myobj.update_iterables(
+            {'setting1': 'foo', 'setting2': 'bar', '__boo': 'boo'},
+            attr='settings', save=False)
+        assert myobj.settings == {'setting1': 'foo', 'setting2': 'bar'}
+        assert not mock_save.called
+
+        # New values to existing value
+        myobj.update_iterables(
+            {'-setting1': 'foo', 'setting3': 'baz'}, attr='settings',
+            save=False)
+        assert myobj.settings == {'setting2': 'bar', 'setting3': 'baz'}
+
+        # With save
+        myobj.update_iterables({}, attr='settings', save=True)
+        assert mock_save.called
+
+        # Nulify
+        myobj.update_iterables("", attr='settings', unique=False)
+        assert myobj.settings == {}
+        myobj.update_iterables(None, attr='settings', unique=False)
+        assert myobj.settings == {}
+
+    @patch('nefertari_es.documents.BaseDocument.save')
+    def test_update_iterables_list(self, mock_save):
+        class MyModel(docs.BaseDocument):
+            id = fields.IdField(primary_key=True)
+            settings = fields.ListField()
+        myobj = MyModel(id=1)
+
+        # No existing value
+        myobj.update_iterables(
+            {'setting1': '', 'setting2': '', '__boo': 'boo'},
+            attr='settings', save=False)
+        assert sorted(myobj.settings) == ['setting1', 'setting2']
+        assert not mock_save.called
+
+        # New values to existing value
+        myobj.update_iterables(
+            {'-setting1': '', 'setting3': ''}, attr='settings',
+            unique=True, save=False)
+        assert sorted(myobj.settings) == ['setting2', 'setting3']
+        assert not mock_save.called
+
+        # With save
+        myobj.update_iterables(
+            {'setting2': ''}, attr='settings', unique=False, save=True)
+        assert sorted(myobj.settings) == ['setting2', 'setting2', 'setting3']
+        assert mock_save.called
+
+        # Nulify
+        myobj.update_iterables(None, attr='settings', unique=False)
+        assert myobj.settings == []
+        myobj.update_iterables("", attr='settings', unique=False)
+        assert myobj.settings == []
+
+
+
+
+
+
+
 
 
 

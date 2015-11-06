@@ -198,12 +198,12 @@ class ReferenceField(BaseFieldMixin, field.String):
         return super(ReferenceField, self).clean(data)
 
 
-def Relationship(document_type, **kwargs):
+def Relationship(document, **kwargs):
     # XXX deal with updating, deleting rules
     _init_kwargs = kwargs.copy()
-    _init_kwargs['document_type'] = document_type
+    _init_kwargs['document'] = document
     kwargs['multi'] = kwargs.pop('uselist', True)
-    kwargs['doc_class'] = document_type
+    kwargs['doc_class'] = document
     field = ReferenceField(**kwargs)
     field._init_kwargs = _init_kwargs
     return field

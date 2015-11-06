@@ -11,6 +11,8 @@ TODO:
 
 - Mock data should load properly
 
+- Should nefertari-es BaseDocument have default fields as well?
+
 
 Next tasks:
 
@@ -50,6 +52,8 @@ Next tasks:
 Advanced tasks:
 
 - Implement ondelete/onupdate hooks for relationships
+
+- Make nefertari-es work with token auth
 
 - Make relationships sync work on _update_many/_delete_many
 
