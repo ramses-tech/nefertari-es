@@ -286,23 +286,8 @@ class TestBaseDocument(object):
         simple_model.get_collection = Mock(return_value=['one', 'two'])
         item = simple_model.get_item(foo=1)
         simple_model.get_collection.assert_called_once_with(
-            _limit=1, _item_request=True, foo=1)
+            __raise_on_empty=True, _limit=1, _item_request=True, foo=1)
         assert item == 'one'
-
-    def test_get_item_not_found_not_raise(self, simple_model):
-        simple_model.get_collection = Mock(return_value=[])
-        item = simple_model.get_item(foo=1, _raise_on_empty=False)
-        simple_model.get_collection.assert_called_once_with(
-            _limit=1, _item_request=True, foo=1)
-        assert item is None
-
-    def test_get_item_not_found_raise(self, simple_model):
-        simple_model.get_collection = Mock(return_value=[])
-        with pytest.raises(JHTTPNotFound) as ex:
-            simple_model.get_item(foo=1)
-        assert 'resource not found' in str(ex.value)
-        simple_model.get_collection.assert_called_once_with(
-            _limit=1, _item_request=True, foo=1)
 
     @patch('nefertari_es.documents._bulk')
     def test_update_many(self, mock_bulk, simple_model):
@@ -337,6 +322,55 @@ class TestBaseDocument(object):
     def test_fields_to_query(self, simple_model):
         assert set(simple_model.fields_to_query()) == {
             '_id', 'name', 'price'}
+
+    def test_has_field(self, simple_model):
+        assert simple_model.has_field('name')
+        assert simple_model.has_field('price')
+        assert not simple_model.has_field('foo')
+
+    @patch('nefertari_es.documents.BaseDocument.get_collection')
+    def test_get_or_create_found_one(self, mock_get, simple_model):
+        mock_get.return_value = [123]
+        obj, created = simple_model.get_or_create(
+            foo=1, defaults={'bar': 2})
+        assert obj == 123
+        assert not created
+        mock_get.assert_called_once_with(foo=1, _raise_on_empty=False)
+
+    @patch('nefertari_es.documents.BaseDocument.get_collection')
+    def test_get_or_create_found_multiple(self, mock_get, simple_model):
+        mock_get.return_value = [1, 2, 3]
+        with pytest.raises(JHTTPBadRequest) as ex:
+            simple_model.get_or_create(foo=1, defaults={'bar': 2})
+        assert 'Bad or Insufficient Params' in str(ex.value)
+        mock_get.assert_called_once_with(foo=1, _raise_on_empty=False)
+
+    @patch('nefertari_es.documents.DocType.save')
+    @patch('nefertari_es.documents.BaseDocument.get_collection')
+    def test_get_or_create_not_found(
+            self, mock_get, mock_save, simple_model):
+        mock_get.return_value = []
+        obj, created = simple_model.get_or_create(
+            name='foo', defaults={'price': 123})
+        mock_get.assert_called_once_with(
+            name='foo', _raise_on_empty=False)
+        assert created
+        assert obj.name == 'foo'
+        assert obj.price == 123
+
+    def test_get_null_values(
+            self, simple_model, story_model, person_model):
+        assert simple_model.get_null_values() == {
+            'name': '', 'price': None}
+        assert story_model.get_null_values() == {
+            'author': None, 'name': '', 'tags': []}
+        assert person_model.get_null_values() == {
+            'name': '', 'story': None}
+
+        class MyModel(docs.BaseDocument):
+            settings = fields.DictField()
+
+        assert MyModel.get_null_values() == {'settings': {}}
 
     @patch('nefertari_es.documents.BaseDocument.save')
     def test_update_iterables_dict(self, mock_save):
@@ -401,13 +435,12 @@ class TestBaseDocument(object):
         myobj.update_iterables("", attr='settings', unique=False)
         assert myobj.settings == []
 
-
-
-
-
-
-
-
+    def test_is_created(self, simple_model):
+        item = simple_model()
+        assert item._created
+        assert item._is_created()
+        item._created = False
+        assert not item._is_created()
 
 
 class TestHelpers(object):
@@ -540,6 +573,20 @@ class TestGetCollection(object):
             'name', '-price')
         assert result == mock_search().sort().execute().hits
 
+    def test_raise_not_found(self, mock_search, simple_model):
+        mock_search().filter().execute().hits = None
+        with pytest.raises(JHTTPNotFound) as ex:
+            simple_model.get_collection(name=1, _raise_on_empty=True)
+        assert 'resource not found' in str(ex.value)
+
+    def test_not_raise_not_found(self, mock_search, simple_model):
+        class Results(object):
+            total = 0
+        mock_search().filter().execute().hits = Results()
+        try:
+            simple_model.get_collection(name=1, _raise_on_empty=False)
+        except JHTTPNotFound:
+            raise Exception('Unexpected error')
 
 class TestSyncRelatedMixin(object):
     def test_mixin_included_in_doc(self):

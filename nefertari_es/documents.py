@@ -353,7 +353,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
         return cls._doc_type.mapping[pk_field].__class__
 
     @classmethod
-    def get_item(cls, _raise_on_empty=True, **kw):
+    def get_item(cls, **kw):
         """ Get single item and raise exception if not found.
 
         Exception raising when item is not found can be disabled
@@ -361,12 +361,8 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
         :returns: Single collection item as an instance of ``cls``.
         """
+        kw.setdefault('__raise_on_empty', True)
         result = cls.get_collection(_limit=1, _item_request=True, **kw)
-        if not result:
-            if _raise_on_empty:
-                msg = "'%s(%s)' resource not found" % (cls.__name__, kw)
-                raise JHTTPNotFound(msg)
-            return None
         return result[0]
 
     @classmethod
@@ -395,7 +391,8 @@ class BaseDocument(SyncRelatedMixin, DocType):
     def get_collection(cls, _count=False, _strict=True, _sort=None,
                        _fields=None, _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False, _explain=None,
-                       _search_fields=None, q=None, **params):
+                       _search_fields=None, q=None, _raise_on_empty=False,
+                       **params):
         """ Query collection and return results.
 
         Notes:
@@ -510,6 +507,10 @@ class BaseDocument(SyncRelatedMixin, DocType):
             search_obj = search_obj.sort(*sort_fields)
 
         hits = search_obj.execute().hits
+        if not hits and _raise_on_empty:
+            msg = "'%s(%s)' resource not found" % (cls.__name__, params)
+            raise JHTTPNotFound(msg)
+
         hits._nefertari_meta = dict(
             total=hits.total,
             start=_start,
@@ -543,33 +544,28 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
     @classmethod
     def get_or_create(cls, **params):
-        pass
-        # defaults = params.pop('defaults', {})
-        # try:
-        #     return cls.objects.get(**params), False
-        # except mongo.queryset.DoesNotExist:
-        #     defaults.update(params)
-        #     return cls(**defaults).save(), True
-        # except mongo.queryset.MultipleObjectsReturned:
-        #     raise JHTTPBadRequest('Bad or Insufficient Params')
+        defaults = params.pop('defaults', {})
+        items = cls.get_collection(_raise_on_empty=False, **params)
+        if not items:
+            defaults.update(params)
+            return cls(**defaults).save(), True
+        elif len(items) > 1:
+            raise JHTTPBadRequest('Bad or Insufficient Params')
+        else:
+            return items[0], False
 
     @classmethod
     def get_null_values(cls):
-        pass
-        # """ Get null values of :cls: fields. """
-        # skip_fields = {'_version', '_acl'}
-        # null_values = {}
-        # for name in cls._fields.keys():
-        #     if name in skip_fields:
-        #         continue
-        #     field = getattr(cls, name)
-        #     if isinstance(field, RelationshipField):
-        #         value = []
-        #     else:
-        #         value = None
-        #     null_values[name] = value
-        # null_values.pop('id', None)
-        # return null_values
+        """ Get null values of :cls: fields. """
+        skip_fields = {'_version', '_acl'}
+        null_values = {}
+        for name in cls._doc_type.mapping:
+            if name in skip_fields:
+                continue
+            field = cls._doc_type.mapping[name]
+            null_values[name] = field.empty()
+        null_values.pop('id', None)
+        return null_values
 
     def update_iterables(self, params, attr, unique=False,
                          value_type=None, save=True,
