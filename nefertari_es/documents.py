@@ -18,7 +18,7 @@ from nefertari.utils import (
     dictset,
     split_strip,
 )
-from .meta import BackrefGeneratingDocMeta
+from .meta import DocTypeMeta
 from .fields import ReferenceField, IdField, DictField, ListField
 
 
@@ -141,7 +141,7 @@ class SyncRelatedMixin(object):
             return obj
 
 
-@add_metaclass(BackrefGeneratingDocMeta)
+@add_metaclass(DocTypeMeta)
 class BaseDocument(SyncRelatedMixin, DocType):
     _public_fields = None
     _auth_fields = None

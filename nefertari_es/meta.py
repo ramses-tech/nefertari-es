@@ -1,5 +1,5 @@
 from elasticsearch_dsl import Index
-from elasticsearch_dsl.document import DocTypeMeta
+from elasticsearch_dsl.document import DocTypeMeta as ESDocTypeMeta
 
 # BaseDocument subclasses registry
 # maps class names to classes
@@ -42,21 +42,22 @@ def get_document_classes():
     return _document_registry.copy()
 
 
-class RegisteredDocMeta(DocTypeMeta):
-    """ Metaclass that registers defined doctypes in
+class RegisteredDocMixin(type):
+    """ Metaclass mixin that registers defined doctypes in
     ``_document_registry``.
     """
     def __new__(cls, name, bases, attrs):
-        new_class = super(RegisteredDocMeta, cls).__new__(
+        new_class = super(RegisteredDocMixin, cls).__new__(
             cls, name, bases, attrs)
         _document_registry[new_class.__name__] = new_class
         return new_class
 
 
-class BackrefGeneratingDocMeta(RegisteredDocMeta):
+class BackrefGeneratingDocMixin(type):
+    """ Metaclass mixin that generates relationship backrefs. """
     def __new__(cls, name, bases, attrs):
         from .fields import Relationship
-        new_class = super(BackrefGeneratingDocMeta, cls).__new__(
+        new_class = super(BackrefGeneratingDocMixin, cls).__new__(
             cls, name, bases, attrs)
 
         relationships = new_class._relationships()
@@ -75,3 +76,9 @@ class BackrefGeneratingDocMeta(RegisteredDocMeta):
             field._back_populates = field_name
 
         return new_class
+
+
+class DocTypeMeta(RegisteredDocMixin,
+                  BackrefGeneratingDocMixin,
+                  ESDocTypeMeta):
+    pass

@@ -43,8 +43,12 @@ class TestDocumentRegistry(object):
 
     def test_registereddocumentmeta(self):
         from six import add_metaclass
+        from elasticsearch_dsl.document import DocTypeMeta
 
-        @add_metaclass(meta.RegisteredDocMeta)
+        class MyMeta(meta.RegisteredDocMixin, DocTypeMeta):
+            pass
+
+        @add_metaclass(MyMeta)
         class MyItem123(object):
             pass
 
