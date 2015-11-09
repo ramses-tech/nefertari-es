@@ -5,7 +5,7 @@ from six import (
     add_metaclass,
 )
 from elasticsearch_dsl import DocType
-from elasticsearch_dsl.utils import AttrList
+from elasticsearch_dsl.utils import AttrList, AttrDict
 from elasticsearch_dsl.field import InnerObjectWrapper
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
@@ -307,8 +307,11 @@ class BaseDocument(SyncRelatedMixin, DocType):
                 if not isinstance(value, (list, AttrList)):
                     value = [value]
                 for val in value:
-                    val._nesting_depth = _depth - 1
-                    val._request = request
+                    try:
+                        val._nesting_depth = _depth - 1
+                        val._request = request
+                    except AttributeError:
+                        continue
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
         data = {key: val for key, val in data.items()
@@ -526,8 +529,9 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
     @classmethod
     def get_field_params(cls, field_name):
-        field = cls._doc_type.mapping[field_name]
-        return getattr(field, '_init_kwargs', None)
+        if field_name in cls._doc_type.mapping:
+            field = cls._doc_type.mapping[field_name]
+            return getattr(field, '_init_kwargs', None)
 
     @classmethod
     def fields_to_query(cls):
@@ -591,7 +595,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
         def update_dict(update_params):
             final_value = getattr(self, attr, {}) or {}
-            if isinstance(final_value, InnerObjectWrapper):
+            if isinstance(final_value, (InnerObjectWrapper, AttrDict)):
                 final_value = final_value.to_dict()
             else:
                 final_value = final_value.copy()

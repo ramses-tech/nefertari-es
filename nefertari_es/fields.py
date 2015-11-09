@@ -66,9 +66,18 @@ class IntervalField(BaseFieldMixin, field.Integer):
         return super(IntervalField, self)._to_python(data)
 
 
+class CustomInnerObjectWrapper(field.InnerObjectWrapper):
+    def to_dict(self, *args, **kwargs):
+        return super(CustomInnerObjectWrapper, self).to_dict()
+
+
 class DictField(CustomMappingMixin, BaseFieldMixin, field.Object):
     name = 'dict'
     _custom_mapping = {'type': 'object', 'enabled': False}
+
+    def __init__(self, *args, **kwargs):
+        super(DictField, self).__init__(*args, **kwargs)
+        self._doc_class = CustomInnerObjectWrapper
 
 
 class DateTimeField(CustomMappingMixin, BaseFieldMixin, field.Field):

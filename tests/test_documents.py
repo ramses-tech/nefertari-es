@@ -318,6 +318,7 @@ class TestBaseDocument(object):
             'backref_name': 'story',
             'document': 'Person',
             'uselist': False}
+        assert story_model.get_field_params('foobar123') is None
 
     def test_fields_to_query(self, simple_model):
         assert set(simple_model.fields_to_query()) == {
