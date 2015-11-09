@@ -55,6 +55,30 @@ class TestDocumentRegistry(object):
         assert meta._document_registry['MyItem123'] is MyItem123
 
 
+class TestNonDocumentInheritanceMixin(object):
+
+    def test_fields_added_to_mapping(self):
+        class Mixin(object):
+            username = fields.StringField(primary_key=True)
+
+        class User(Mixin, documents.BaseDocument):
+            password = fields.StringField()
+
+        assert 'username' in User._doc_type.mapping
+        assert isinstance(
+            User._doc_type.mapping['username'],
+            fields.StringField)
+        assert 'password' in User._doc_type.mapping
+        assert isinstance(
+            User._doc_type.mapping['password'],
+            fields.StringField)
+        assert User.pk_field() == 'username'
+
+        user = User(username='foo', password='bar')
+        assert user.username == 'foo'
+        assert user.password == 'bar'
+
+
 class TestBackrefGeneratingDocMeta(object):
 
     def test_backref_generation(self):

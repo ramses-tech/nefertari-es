@@ -311,6 +311,8 @@ class BaseDocument(SyncRelatedMixin, DocType):
                     val._request = request
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
+        data = {key: val for key, val in data.items()
+                if not key.startswith('__')}
 
         if request is not None or include_meta:
             data['_type'] = self.__class__.__name__

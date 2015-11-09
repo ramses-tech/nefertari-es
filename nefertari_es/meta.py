@@ -1,3 +1,5 @@
+import inspect
+
 from elasticsearch_dsl import Index
 from elasticsearch_dsl.document import DocTypeMeta as ESDocTypeMeta
 from elasticsearch_dsl.field import Field
@@ -55,35 +57,28 @@ class RegisteredDocMixin(type):
 
 
 class NonDocumentInheritanceMixin(type):
-    """ Metaclass mixin that allows fields to be inherited from
-    classes which are not instances of DocType.
+    """ Metaclass mixin that adds class attribute fields to mapping
+    of they are not there yet.
 
-    Field is skipped if any of the following is true:
-        * Field is explicitly defined in new class;
-        * Field is present in any base class mapping which is instance
-          of DocType.
+    Is useful when inheriting non-DocType subclasses which define
+    fields.
     """
     def __new__(cls, name, bases, attrs):
-        nondoc_fields = {}
-        base_docs_fields = {}
-
-        for base in bases:
-            has_mapping = (hasattr(base, '_doc_type') and
-                           hasattr(base._doc_type, 'mapping'))
-            if has_mapping:
-                base_docs_fields.update(base._doc_type.mapping.to_dict())
-                continue
-
-            for key, val in dict(base.__dict__).items():
-                if isinstance(val, Field):
-                    nondoc_fields[key] = val
-
-        for name, field in nondoc_fields.items():
-            if name not in attrs and name not in base_docs_fields:
-                attrs[name] = field
-
-        return super(NonDocumentInheritanceMixin, cls).__new__(
+        new_cls = super(NonDocumentInheritanceMixin, cls).__new__(
             cls, name, bases, attrs)
+        mapping = new_cls._doc_type.mapping
+
+        def _attr_error(*args, **kwargs):
+            raise AttributeError
+
+        for name, member in inspect.getmembers(new_cls):
+            if name.startswith('__') or name in mapping:
+                continue
+            if isinstance(member, Field):
+                mapping.field(name, member)
+                setattr(new_cls, name, property(_attr_error))
+
+        return new_cls
 
 
 class BackrefGeneratingDocMixin(type):
@@ -111,8 +106,8 @@ class BackrefGeneratingDocMixin(type):
         return new_class
 
 
-class DocTypeMeta(RegisteredDocMixin,
-                  NonDocumentInheritanceMixin,
+class DocTypeMeta(NonDocumentInheritanceMixin,
+                  RegisteredDocMixin,
                   BackrefGeneratingDocMixin,
                   ESDocTypeMeta):
     pass
