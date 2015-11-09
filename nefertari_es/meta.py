@@ -1,5 +1,6 @@
 from elasticsearch_dsl import Index
 from elasticsearch_dsl.document import DocTypeMeta as ESDocTypeMeta
+from elasticsearch_dsl.field import Field
 
 # BaseDocument subclasses registry
 # maps class names to classes
@@ -53,6 +54,38 @@ class RegisteredDocMixin(type):
         return new_class
 
 
+class NonDocumentInheritanceMixin(type):
+    """ Metaclass mixin that allows fields to be inherited from
+    classes which are not instances of DocType.
+
+    Field is skipped if any of the following is true:
+        * Field is explicitly defined in new class;
+        * Field is present in any base class mapping which is instance
+          of DocType.
+    """
+    def __new__(cls, name, bases, attrs):
+        nondoc_fields = {}
+        base_docs_fields = {}
+
+        for base in bases:
+            has_mapping = (hasattr(base, '_doc_type') and
+                           hasattr(base._doc_type, 'mapping'))
+            if has_mapping:
+                base_docs_fields.update(base._doc_type.mapping.to_dict())
+                continue
+
+            for key, val in dict(base.__dict__).items():
+                if isinstance(val, Field):
+                    nondoc_fields[key] = val
+
+        for name, field in nondoc_fields.items():
+            if name not in attrs and name not in base_docs_fields:
+                attrs[name] = field
+
+        return super(NonDocumentInheritanceMixin, cls).__new__(
+            cls, name, bases, attrs)
+
+
 class BackrefGeneratingDocMixin(type):
     """ Metaclass mixin that generates relationship backrefs. """
     def __new__(cls, name, bases, attrs):
@@ -79,6 +112,7 @@ class BackrefGeneratingDocMixin(type):
 
 
 class DocTypeMeta(RegisteredDocMixin,
+                  NonDocumentInheritanceMixin,
                   BackrefGeneratingDocMixin,
                   ESDocTypeMeta):
     pass
