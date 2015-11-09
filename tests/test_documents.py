@@ -286,7 +286,7 @@ class TestBaseDocument(object):
         simple_model.get_collection = Mock(return_value=['one', 'two'])
         item = simple_model.get_item(foo=1)
         simple_model.get_collection.assert_called_once_with(
-            __raise_on_empty=True, _limit=1, _item_request=True, foo=1)
+            _raise_on_empty=True, _limit=1, _item_request=True, foo=1)
         assert item == 'one'
 
     @patch('nefertari_es.documents._bulk')

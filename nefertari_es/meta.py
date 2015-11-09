@@ -106,8 +106,23 @@ class BackrefGeneratingDocMixin(type):
         return new_class
 
 
-class DocTypeMeta(NonDocumentInheritanceMixin,
-                  RegisteredDocMixin,
-                  BackrefGeneratingDocMixin,
-                  ESDocTypeMeta):
+class GenerateMetaMixin(type):
+    """ Metaclass mixin that generates Meta class attribute. """
+    def __new__(cls, name, bases, attrs):
+        if 'Meta' not in attrs:
+
+            class Meta(object):
+                doc_type = name
+
+            attrs['Meta'] = Meta
+        return super(GenerateMetaMixin, cls).__new__(
+            cls, name, bases, attrs)
+
+
+class DocTypeMeta(
+        GenerateMetaMixin,
+        NonDocumentInheritanceMixin,
+        RegisteredDocMixin,
+        BackrefGeneratingDocMixin,
+        ESDocTypeMeta):
     pass

@@ -79,6 +79,15 @@ class TestNonDocumentInheritanceMixin(object):
         assert user.password == 'bar'
 
 
+class TestGenerateMetaMixin(object):
+
+    def test_meta_generation(self):
+        class FooBar(documents.BaseDocument):
+            username = fields.StringField(primary_key=True)
+
+        assert FooBar._doc_type.name == 'FooBar'
+
+
 class TestBackrefGeneratingDocMeta(object):
 
     def test_backref_generation(self):

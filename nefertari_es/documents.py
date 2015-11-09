@@ -317,7 +317,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
         data = {key: val for key, val in data.items()
                 if not key.startswith('__')}
 
-        if request is not None or include_meta:
+        if request is not None and '_type' not in data:
             data['_type'] = self.__class__.__name__
         if request is not None:
             data['_pk'] = str(getattr(self, self.pk_field()))
@@ -366,7 +366,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
         :returns: Single collection item as an instance of ``cls``.
         """
-        kw.setdefault('__raise_on_empty', True)
+        kw.setdefault('_raise_on_empty', True)
         result = cls.get_collection(_limit=1, _item_request=True, **kw)
         return result[0]
 
@@ -599,8 +599,10 @@ class BaseDocument(SyncRelatedMixin, DocType):
                 final_value = final_value.to_dict()
             else:
                 final_value = final_value.copy()
+            if isinstance(update_params, (InnerObjectWrapper, AttrDict)):
+                update_params = update_params.to_dict()
 
-            if update_params is None or update_params == '':
+            if update_params in (None, '', {}):
                 if not final_value:
                     return
                 update_params = {
@@ -623,7 +625,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
             final_value = getattr(self, attr, []) or []
             final_value = list(final_value)
             final_value = copy.deepcopy(final_value)
-            if update_params is None or update_params == '':
+            if update_params in (None, '', []):
                 if not final_value:
                     return
                 update_params = ['-' + val for val in final_value]
