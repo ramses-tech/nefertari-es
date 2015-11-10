@@ -4,9 +4,6 @@ Backend and search engine for Nefertari
 
 TODO:
 
-- Both ramses- and nefertari- examples default branches should work with
-  nerfertari-es
-
 - Should nefertari-es BaseDocument have default fields as well?
 
 
@@ -43,6 +40,9 @@ Next tasks:
   when models are changed. it might make sense to change these hooks
   to generate pyramid events. then the es engine can listen for these
   events, thus de-coupling the engines.
+
+- Update Ramses to work with multiple engines properly. ramses-example
+  should work with nefertari-es and multiple engines.
 
 
 Advanced tasks:
