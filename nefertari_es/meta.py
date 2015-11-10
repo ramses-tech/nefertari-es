@@ -68,15 +68,16 @@ class NonDocumentInheritanceMixin(type):
             cls, name, bases, attrs)
         mapping = new_cls._doc_type.mapping
 
-        def _attr_error(*args, **kwargs):
-            raise AttributeError
+        class AttributeErrorDescriptor(object):
+            def __get__(self, *args, **kwargs):
+                raise AttributeError
 
         for name, member in inspect.getmembers(new_cls):
             if name.startswith('__') or name in mapping:
                 continue
             if isinstance(member, Field):
                 mapping.field(name, member)
-                setattr(new_cls, name, property(_attr_error))
+                setattr(new_cls, name, AttributeErrorDescriptor())
 
         return new_cls
 

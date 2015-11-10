@@ -4,12 +4,8 @@ Backend and search engine for Nefertari
 
 TODO:
 
-- Authentication
-
 - Both ramses- and nefertari- examples default branches should work with
   nerfertari-es
-
-- Mock data should load properly
 
 - Should nefertari-es BaseDocument have default fields as well?
 
@@ -60,3 +56,5 @@ Advanced tasks:
 - Caching of loaded ES documents
 
 - Unique constraint on PK fields?
+
+- Make nefertari-es work wirh nefertari-guards
