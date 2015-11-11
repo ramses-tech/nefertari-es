@@ -2,7 +2,7 @@ from functools import partial
 import copy
 
 from six import (
-    add_metaclass,
+    with_metaclass,
 )
 from elasticsearch_dsl import DocType
 from elasticsearch_dsl.utils import AttrList, AttrDict
@@ -19,7 +19,10 @@ from nefertari.utils import (
     split_strip,
 )
 from .meta import DocTypeMeta
-from .fields import ReferenceField, IdField, DictField, ListField
+from .fields import (
+    ReferenceField, IdField, DictField, ListField,
+    IntegerField,
+)
 
 
 class SyncRelatedMixin(object):
@@ -141,8 +144,34 @@ class SyncRelatedMixin(object):
             return obj
 
 
-@add_metaclass(DocTypeMeta)
-class BaseDocument(SyncRelatedMixin, DocType):
+class VersionedMixin(object):
+    """ Mixin that adds "version" field. """
+    version = IntegerField()
+
+    def _bump_version(self):
+        if self._is_modified():
+            self.version = (self.version or 0) + 1
+
+    def save(self, *args, **kwargs):
+        self._bump_version()
+        return super(VersionedMixin, self).save(*args, **kwargs)
+
+    @classmethod
+    def get_null_values(cls):
+        null_values = super(VersionedMixin, cls).get_null_values()
+        null_values.pop('version', None)
+        return null_values
+
+    def __repr__(self):
+        name = super(VersionedMixin, self).__repr__()
+        if hasattr(self, 'version'):
+            name.replace('>', ', v=%s>' % self.version)
+        return name
+
+
+class BaseDocument(with_metaclass(
+        DocTypeMeta,
+        VersionedMixin, SyncRelatedMixin, DocType)):
     _public_fields = None
     _auth_fields = None
     _hidden_fields = None
@@ -203,13 +232,8 @@ class BaseDocument(SyncRelatedMixin, DocType):
 
     def __repr__(self):
         parts = ['%s:' % self.__class__.__name__]
-
         pk_field = self.pk_field()
         parts.append('{}={}'.format(pk_field, getattr(self, pk_field)))
-
-        if hasattr(self, '_version'):
-            parts.append('v=%s' % self._version)
-
         return '<%s>' % ', '.join(parts)
 
     def _getattr_raw(self, name):
@@ -563,7 +587,7 @@ class BaseDocument(SyncRelatedMixin, DocType):
     @classmethod
     def get_null_values(cls):
         """ Get null values of :cls: fields. """
-        skip_fields = {'_version', '_acl'}
+        skip_fields = {'_acl'}
         null_values = {}
         for name in cls._doc_type.mapping:
             if name in skip_fields:

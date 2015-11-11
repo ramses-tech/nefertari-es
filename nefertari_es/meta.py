@@ -71,7 +71,6 @@ class NonDocumentInheritanceMixin(type):
         class AttributeErrorDescriptor(object):
             def __get__(self, *args, **kwargs):
                 raise AttributeError
-
         for name, member in inspect.getmembers(new_cls):
             if name.startswith('__') or name in mapping:
                 continue

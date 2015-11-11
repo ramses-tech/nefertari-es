@@ -322,7 +322,7 @@ class TestBaseDocument(object):
 
     def test_fields_to_query(self, simple_model):
         assert set(simple_model.fields_to_query()) == {
-            '_id', 'name', 'price'}
+            '_id', 'name', 'price', 'version'}
 
     def test_has_field(self, simple_model):
         assert simple_model.has_field('name')
@@ -362,16 +362,17 @@ class TestBaseDocument(object):
     def test_get_null_values(
             self, simple_model, story_model, person_model):
         assert simple_model.get_null_values() == {
-            'name': '', 'price': None}
+            'name': '', 'price': None, 'version': None}
         assert story_model.get_null_values() == {
-            'author': None, 'name': '', 'tags': []}
+            'author': None, 'name': '', 'tags': [], 'version': None}
         assert person_model.get_null_values() == {
-            'name': '', 'story': None}
+            'name': '', 'story': None, 'version': None}
 
         class MyModel(docs.BaseDocument):
             settings = fields.DictField()
 
-        assert MyModel.get_null_values() == {'settings': {}}
+        assert MyModel.get_null_values() == {
+            'settings': {}, 'version': None}
 
     @patch('nefertari_es.documents.BaseDocument.save')
     def test_update_iterables_dict(self, mock_save):

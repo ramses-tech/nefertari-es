@@ -2,16 +2,10 @@
 
 Backend and search engine for Nefertari
 
-TODO:
-
-- Should nefertari-es BaseDocument have default fields as well?
-
 
 Next tasks:
 
 - Docstrings
-
-- Support 'body' param in ES queries?
 
 - Aggregations
 
