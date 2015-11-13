@@ -294,16 +294,35 @@ class TestBaseDocument(object):
         item = simple_model(name='first', price=2)
         simple_model._update_many([item], {'name': 'second'})
         mock_bulk.assert_called_once_with(
-            [{'doc': {'name': 'second'}, '_type': 'Item'}],
-            item.connection, op_type='update', request=None)
+            actions=[{'doc': {'name': 'second'}, '_type': 'Item'}],
+            client=item.connection, op_type='update', request=None)
 
     @patch('nefertari_es.documents._bulk')
     def test_delete_many(self, mock_bulk, simple_model):
         item = simple_model(name='first', price=2)
         simple_model._delete_many([item])
         mock_bulk.assert_called_once_with(
-            [{'_type': 'Item', '_source': {'price': 2, 'name': 'first'}}],
-            item.connection, op_type='delete', request=None)
+            actions=[{
+                '_type': 'Item', '_source': {'price': 2, 'name': 'first'}}],
+            client=item.connection, op_type='delete', request=None)
+
+    @patch('nefertari_es.documents.partial')
+    @patch('nefertari_es.documents._perform_in_chunks')
+    def test_delete_many_performs_in_chunks(
+            self, mock_perf, mock_part, simple_model):
+        item = simple_model(name='first', price=2)
+        simple_model._delete_many([item])
+        assert mock_part.call_count == 1
+        assert mock_perf.call_count == 1
+
+    @patch('nefertari_es.documents.partial')
+    @patch('nefertari_es.documents._perform_in_chunks')
+    def test_update_many_performs_in_chunks(
+            self, mock_perf, mock_part, simple_model):
+        item = simple_model(name='first', price=2)
+        simple_model._update_many([item], {'name': 'second'})
+        assert mock_part.call_count == 1
+        assert mock_perf.call_count == 1
 
     @patch('nefertari_es.documents.BaseDocument.get_collection')
     def test_get_by_ids(self, mock_get, simple_model):
@@ -484,6 +503,17 @@ class TestHelpers(object):
         with pytest.raises(JHTTPBadRequest) as ex:
             docs._validate_fields(simple_model, ['fofo', 'price'])
         assert 'object does not have fields: fofo' in str(ex.value)
+
+    def test_perform_in_chunks(self):
+        operation = Mock()
+        docs._perform_in_chunks([1, 2, 3, 4], operation, 2)
+        operation.assert_called_with(actions=[3, 4])
+        assert operation.call_count == 2
+
+        operation2 = Mock()
+        docs._perform_in_chunks([1, 2, 3, 4], operation2, 1)
+        operation2.assert_called_with(actions=[4])
+        assert operation2.call_count == 4
 
     @patch('nefertari_es.documents.helpers')
     def test_bulk(self, mock_helpers):

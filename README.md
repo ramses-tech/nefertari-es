@@ -28,8 +28,6 @@ Next tasks:
 
 - Multi-collection requests
 
-- Perform bulk operations in chunks
-
 - Rework es.py script in nefertari to work with nefertari-es (indexing
   all documents and missing documents)
 

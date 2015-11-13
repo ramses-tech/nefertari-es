@@ -401,11 +401,16 @@ class BaseDocument(with_metaclass(
             return
 
         actions = [item.to_dict(include_meta=True) for item in items]
+        actions_count = len(actions)
         for action in actions:
             action.pop('_source')
             action['doc'] = params
         client = items[0].connection
-        return _bulk(actions, client, op_type='update', request=request)
+        operation = partial(
+            _bulk,
+            client=client, op_type='update', request=request)
+        _perform_in_chunks(actions, operation)
+        return actions_count
 
     @classmethod
     def _delete_many(cls, items, request=None):
@@ -413,8 +418,13 @@ class BaseDocument(with_metaclass(
             return
 
         actions = [item.to_dict(include_meta=True) for item in items]
+        actions_count = len(actions)
         client = items[0].connection
-        return _bulk(actions, client, op_type='delete', request=request)
+        operation = partial(
+            _bulk,
+            client=client, op_type='delete', request=request)
+        _perform_in_chunks(actions, operation)
+        return actions_count
 
     @classmethod
     def get_collection(cls, _count=False, _strict=True, _sort=None,
@@ -735,6 +745,25 @@ def _validate_fields(cls, field_names):
         raise JHTTPBadRequest(
             "'%s' object does not have fields: %s" % (
             cls.__name__, ', '.join(invalid_names)))
+
+
+def _perform_in_chunks(actions, operation, chunk_size=None):
+    if chunk_size is None:
+        from nefertari_es import Settings
+        chunk_size = Settings.asint('chunk_size', 500)
+
+    start = end = 0
+    count = len(actions)
+
+    while count:
+        if count < chunk_size:
+            chunk_size = count
+        end += chunk_size
+
+        operation(actions=actions[start:end])
+
+        start += chunk_size
+        count -= chunk_size
 
 
 def _bulk(actions, client, op_type='index', request=None):
