@@ -738,6 +738,7 @@ def _validate_fields(cls, field_names):
 
 
 def _bulk(actions, client, op_type='index', request=None):
+    from nefertari_es import Settings
     for action in actions:
         action['_op_type'] = op_type
 
@@ -751,8 +752,7 @@ def _bulk(actions, client, op_type='index', request=None):
     else:
         query_params = request.params.mixed()
     query_params = dictset(query_params)
-    # TODO: Use "elasticsearch.enable_refresh_query" setting here
-    refresh_enabled = False
+    refresh_enabled = Settings.asbool('enable_refresh_query', False)
     if '_refresh_index' in query_params and refresh_enabled:
         kwargs['refresh'] = query_params.asbool('_refresh_index')
 

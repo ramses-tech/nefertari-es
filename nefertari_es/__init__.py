@@ -75,12 +75,16 @@ __all__ = [
 ]
 
 
+Settings = dictset()
+
+
 def includeme(config):
     pass
 
 
 def setup_database(config):
     settings = dictset(config.registry.settings).mget('elasticsearch')
+    Settings.update(settings)
     params = {}
     params['chunk_size'] = settings.get('chunk_size', 500)
     params['hosts'] = []
