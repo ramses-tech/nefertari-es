@@ -18,7 +18,7 @@ from nefertari.utils import (
     dictset,
     split_strip,
 )
-from nefertari.engine.common import MultipleEnginesDocMixin
+from nefertari.engine.common import MultiEngineDocMixin
 
 from .meta import DocTypeMeta
 from .fields import (
@@ -173,7 +173,7 @@ class VersionedMixin(object):
 
 class BaseDocument(with_metaclass(
         DocTypeMeta,
-        MultipleEnginesDocMixin, VersionedMixin, SyncRelatedMixin,
+        MultiEngineDocMixin, VersionedMixin, SyncRelatedMixin,
         DocType)):
     _public_fields = None
     _auth_fields = None
