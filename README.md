@@ -5,8 +5,6 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Create base package that will store code common for all the engines.
-
 - Generate models for secondary engine:
   After model1 is defined, get members&fields of model1, convert all objects from engine1 to objects from engine2. We can already access field init kwargs, so new fields can be instantiated. Not sure about params for other objects and whether other objects except fields exist (probably not). Define model2 as class with one base - BaseDocument from engine and attrs from model1 + re-created fields from engine2. Fields of model1 should be returned by model1 or engine1, because there's no generic way to access model field objects. Model2 will be created by calling type(). Thus model2 will only have one base but will have all the methods and fields of model1. Re-creating fields for model2 can be done by checking whether model1 attribute type is present in engine1 - if True, create and instance of class of the same name from engine2. nefertari.engine could define "setup_database" function that will call functions with the same name from engine1 and engine2.
 
