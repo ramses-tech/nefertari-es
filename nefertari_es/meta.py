@@ -3,6 +3,7 @@ import inspect
 from elasticsearch_dsl import Index
 from elasticsearch_dsl.document import DocTypeMeta as ESDocTypeMeta
 from elasticsearch_dsl.field import Field
+from nefertari.engine.common import MultiEngineMeta
 
 # BaseDocument subclasses registry
 # maps class names to classes
@@ -124,5 +125,6 @@ class DocTypeMeta(
         NonDocumentInheritanceMixin,
         RegisteredDocMixin,
         BackrefGeneratingDocMixin,
+        MultiEngineMeta,
         ESDocTypeMeta):
     pass
