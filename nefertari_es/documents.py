@@ -365,6 +365,11 @@ class BaseDocument(with_metaclass(
         return params
 
     @classmethod
+    def _fields_map(cls):
+        return {name: cls._doc_type.mapping[name]
+                for name in cls._doc_type.mapping}
+
+    @classmethod
     def _relationships(cls):
         return [
             name for name in cls._doc_type.mapping

@@ -268,6 +268,15 @@ class TestBaseDocument(object):
             'author': 'Stephen King',
             'tags': ['novel']}
 
+    def test_fields_map(self, story_model):
+        from nefertari_es import fields
+        field_cls = story_model._fields_map()
+        assert set(field_cls.keys()) == {'author', 'name', 'tags', 'version'}
+        assert isinstance(field_cls['name'], fields.StringField)
+        assert isinstance(field_cls['version'], fields.IntegerField)
+        assert isinstance(field_cls['author'], fields.ReferenceField)
+        assert isinstance(field_cls['tags'], fields.ReferenceField)
+
     def test_relationships_method(self, story_model):
         assert set(story_model._relationships()) == {'author', 'tags'}
 
