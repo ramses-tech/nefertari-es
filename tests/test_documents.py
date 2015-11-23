@@ -35,6 +35,19 @@ class TestBaseDocument(object):
         item2.name = '1'
         assert item2 in items
 
+    def test_is_abstract(self, simple_model):
+        assert not simple_model._is_abstract()
+
+        class Foo(simple_model):
+            __abstract__ = True
+
+        assert Foo._is_abstract()
+
+        class Bar(Foo):
+            barbar = fields.StringField(primary_key=True)
+
+        assert not Bar._is_abstract()
+
     def test_sync_id_field(self, id_model):
         item = id_model()
         assert item.id is None

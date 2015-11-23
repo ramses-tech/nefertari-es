@@ -175,6 +175,7 @@ class BaseDocument(with_metaclass(
         DocTypeMeta,
         MultiEngineDocMixin, VersionedMixin, SyncRelatedMixin,
         DocType)):
+    __abstract__ = True
     _public_fields = None
     _auth_fields = None
     _hidden_fields = None
@@ -213,6 +214,10 @@ class BaseDocument(with_metaclass(
             return hash(cls_name + str(pk))
 
         return _hasher
+
+    @classmethod
+    def _is_abstract(cls):
+        return cls.__dict__.get('__abstract__', False)
 
     def _sync_id_field(self):
         """ Copy meta["_id"] to IdField. """

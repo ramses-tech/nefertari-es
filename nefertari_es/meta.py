@@ -108,8 +108,13 @@ class BackrefGeneratingDocMixin(type):
 
 
 class GenerateMetaMixin(type):
-    """ Metaclass mixin that generates Meta class attribute. """
+    """ Metaclass mixin that generates Meta class attribute.
+
+    Also restores '__abstract__' param to default ``False`` if not
+    explicitly defined.
+    """
     def __new__(cls, name, bases, attrs):
+        attrs.setdefault('__abstract__', False)
         if 'Meta' not in attrs:
 
             class Meta(object):
