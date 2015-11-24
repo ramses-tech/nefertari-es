@@ -5,8 +5,12 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
+- Change "_fields_map" to "_field_types" and return "name: fieldType".
+  "fieldType" should be callable used to instantiate new field. E.g. "Relationship" instead of "ReferenceField".
+
 - Generate models for secondary engine:
-  After model1 is defined, get members&fields of model1, convert all objects from engine1 to objects from engine2. We can already access field init kwargs, so new fields can be instantiated. Not sure about params for other objects and whether other objects except fields exist (probably not). Define model2 as class with one base - BaseDocument from engine and attrs from model1 + re-created fields from engine2. Model2 will be created by calling type(). Thus model2 will only have one base but will have all the methods and fields of model1. Re-creating fields for model2 can be done by checking whether model1 attribute type is present in engine1 - if True, create and instance of class of the same name from engine2. nefertari.engine could define "setup_database" function that will call functions with the same name from engine1 and engine2.
+  After model1 is defined, get members&fields of model1, convert all objects from engine1 to objects from engine2. We can already access field init kwargs, so new fields can be instantiated. Not sure about params for other objects and whether other objects except fields exist (probably not). Define model2 as class with one base - BaseDocument from engine and attrs from model1 + re-created fields from engine2. Model2 will be created by calling type(). Thus model2 will only have one base but will have all the methods and fields of model1. Re-creating fields for model2 can be done by checking whether model1 attribute type is present in engine1 - if True, create and instance of class of the same name from engine2.
+  nefertari.engine could define "setup_database" function that will call functions with the same name from engine1 and engine2.
 
 - Access/query 2nd engine:
   Maybe we can connect two models like - main model would have ".secondary" attribute which will link to generated secondary model and secondary model will have ".primary" attribute which will lead to promary model. In this case collection query can be performed like "Story.secondary.get_collection()".
