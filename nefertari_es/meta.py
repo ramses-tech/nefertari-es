@@ -100,6 +100,7 @@ class BackrefGeneratingDocMixin(type):
             backref_kwargs.setdefault('uselist', False)
             backref_field = Relationship(
                 new_class.__name__, **backref_kwargs)
+            backref_field._is_backref = True
             backref_field._back_populates = name
             target_cls._doc_type.mapping.field(field_name, backref_field)
             field._back_populates = field_name

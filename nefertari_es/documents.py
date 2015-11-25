@@ -23,8 +23,9 @@ from nefertari.engine.common import MultiEngineDocMixin
 from .meta import DocTypeMeta
 from .fields import (
     ReferenceField, IdField, DictField, ListField,
-    IntegerField,
+    IntegerField, Relationship
 )
+from .utils import relationship_fields
 
 
 class SyncRelatedMixin(object):
@@ -370,9 +371,32 @@ class BaseDocument(with_metaclass(
         return params
 
     @classmethod
-    def _fields_map(cls):
-        return {name: cls._doc_type.mapping[name]
-                for name in cls._doc_type.mapping}
+    def _get_fields_creators(cls):
+        """ Return map of field creator classes/functions.
+
+        Map consists of:
+            field name: String name of a field
+            field creator: Class/func that may be run to create new
+                instance of such field. Note that these are classes that
+                create fields, not classes of created fields. E.g.
+                "Relationship" func instead of "ReferenceField".
+
+        Does not return backref relationship fields.
+        """
+        fields = {name: cls._doc_type.mapping[name]
+                  for name in cls._doc_type.mapping}
+
+        backrefs = [
+            key for key, val in fields.items()
+            if (isinstance(val, relationship_fields) and
+                getattr(val, '_is_backref', False))]
+        fields = {key: type(val) for key, val in fields.items()}
+        for key in fields:
+            if fields[key] in relationship_fields:
+                fields[key] = Relationship
+        for name in backrefs:
+            fields.pop(name, None)
+        return fields
 
     @classmethod
     def _relationships(cls):

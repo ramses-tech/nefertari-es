@@ -13,6 +13,11 @@ from .meta import (
     get_document_classes,
     create_index,
 )
+from .utils import (
+    is_relationship_field,
+    get_relationship_cls,
+    relationship_fields,
+)
 from .fields import (
     IdField,
     IntervalField,
@@ -67,6 +72,7 @@ __all__ = [
     'get_document_classes',
     'is_relationship_field',
     'get_relationship_cls',
+    'relationship_fields',
 
     'ListField',
     'ForeignKeyField',
@@ -120,12 +126,3 @@ def setup_index(conn, settings):
     else:
         for doc_cls in get_document_classes().values():
             doc_cls._doc_type.index = index_name
-
-
-def is_relationship_field(field, model_cls):
-    return field in model_cls._relationships()
-
-
-def get_relationship_cls(field, model_cls):
-    field_obj = model_cls._doc_type.mapping[field]
-    return field_obj._doc_class
