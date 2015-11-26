@@ -99,7 +99,8 @@ class TestBaseMixin(object):
         with patch.object(person_model, 'get_collection') as mock_get:
             mock_get.return_value = ['foo']
             parent._load_related('children')
-            mock_get.assert_called_once_with(name=['123'])
+            mock_get.assert_called_once_with(
+                _query_secondary=False, name=['123'])
             assert parent.children == ['foo']
 
     def test_load_related_no_items(self, parent_model, person_model):
@@ -108,7 +109,8 @@ class TestBaseMixin(object):
         with patch.object(person_model, 'get_collection') as mock_get:
             mock_get.return_value = []
             parent._load_related('children')
-            mock_get.assert_called_once_with(name=['123'])
+            mock_get.assert_called_once_with(
+                _query_secondary=False, name=['123'])
             assert parent.children == ['123']
 
     def test_load_related_no_curr_value(

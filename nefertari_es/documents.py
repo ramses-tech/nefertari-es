@@ -269,7 +269,8 @@ class BaseMixin(object):
 
         if not isinstance(value[0], doc_cls):
             pk_field = doc_cls.pk_field()
-            items = doc_cls.get_collection(**{pk_field: value})
+            items = doc_cls.get_collection(
+                **{pk_field: value, '_query_secondary': False})
             if items:
                 self._d_[field_name] = items if field._multi else items[0]
 
