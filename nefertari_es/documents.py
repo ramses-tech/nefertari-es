@@ -714,7 +714,7 @@ class BaseDocument(with_metaclass(
         return cls.__dict__.get('__abstract__', False)
 
     def save(self, request=None, refresh=True, **kwargs):
-        super(BaseMixin, self).save(refresh=refresh, **kwargs)
+        super(BaseDocument, self).save(refresh=refresh, **kwargs)
         self._sync_id_field()
         return self
 
@@ -739,7 +739,7 @@ class BaseDocument(with_metaclass(
         return self.save(**kw)
 
     def delete(self, request=None):
-        super(BaseMixin, self).delete()
+        super(BaseDocument, self).delete()
 
 
 def _cleaned_query_params(cls, params, strict):
