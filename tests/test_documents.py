@@ -354,7 +354,8 @@ class TestBaseMixin(object):
             foo=1, defaults={'bar': 2})
         assert obj == 123
         assert not created
-        mock_get.assert_called_once_with(foo=1, _raise_on_empty=False)
+        mock_get.assert_called_once_with(
+            _query_secondary=False, foo=1, _raise_on_empty=False)
 
     @patch('nefertari_es.documents.BaseDocument.get_collection')
     def test_get_or_create_found_multiple(self, mock_get, simple_model):
@@ -362,7 +363,8 @@ class TestBaseMixin(object):
         with pytest.raises(JHTTPBadRequest) as ex:
             simple_model.get_or_create(foo=1, defaults={'bar': 2})
         assert 'Bad or Insufficient Params' in str(ex.value)
-        mock_get.assert_called_once_with(foo=1, _raise_on_empty=False)
+        mock_get.assert_called_once_with(
+            _query_secondary=False, foo=1, _raise_on_empty=False)
 
     @patch('nefertari_es.documents.DocType.save')
     @patch('nefertari_es.documents.BaseDocument.get_collection')
@@ -372,7 +374,8 @@ class TestBaseMixin(object):
         obj, created = simple_model.get_or_create(
             name='foo', defaults={'price': 123})
         mock_get.assert_called_once_with(
-            name='foo', _raise_on_empty=False)
+            name='foo', _raise_on_empty=False,
+            _query_secondary=False)
         assert created
         assert obj.name == 'foo'
         assert obj.price == 123

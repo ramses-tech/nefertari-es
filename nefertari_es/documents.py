@@ -587,7 +587,9 @@ class BaseMixin(object):
     @classmethod
     def get_or_create(cls, **params):
         defaults = params.pop('defaults', {})
-        items = cls.get_collection(_raise_on_empty=False, **params)
+        items = cls.get_collection(
+            _query_secondary=False, _raise_on_empty=False,
+            **params)
         if not items:
             defaults.update(params)
             return cls(**defaults).save(), True
