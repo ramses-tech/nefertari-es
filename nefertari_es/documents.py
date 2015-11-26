@@ -172,11 +172,7 @@ class VersionedMixin(object):
         return name
 
 
-class BaseDocument(with_metaclass(
-        DocTypeMeta,
-        MultiEngineDocMixin, VersionedMixin, SyncRelatedMixin,
-        DocType)):
-    __abstract__ = True
+class BaseMixin(object):
     _public_fields = None
     _auth_fields = None
     _hidden_fields = None
@@ -185,7 +181,7 @@ class BaseDocument(with_metaclass(
     _request = None
 
     def __init__(self, *args, **kwargs):
-        super(BaseDocument, self).__init__(*args, **kwargs)
+        super(BaseMixin, self).__init__(*args, **kwargs)
         self._sync_id_field()
 
     def __eq__(self, other):
@@ -195,7 +191,7 @@ class BaseDocument(with_metaclass(
             other_pk = getattr(other, pk_field, None)
             return (self_pk is not None and other_pk is not None
                     and self_pk == other_pk)
-        return super(BaseDocument, self).__eq__(other)
+        return super(BaseMixin, self).__eq__(other)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -216,10 +212,6 @@ class BaseDocument(with_metaclass(
 
         return _hasher
 
-    @classmethod
-    def _is_abstract(cls):
-        return cls.__dict__.get('__abstract__', False)
-
     def _sync_id_field(self):
         """ Copy meta["_id"] to IdField. """
         if self.pk_field_type() is IdField:
@@ -230,14 +222,14 @@ class BaseDocument(with_metaclass(
     def __setattr__(self, name, value):
         if name == self.pk_field() and self.pk_field_type() == IdField:
             raise AttributeError('{} is read-only'.format(self.pk_field()))
-        super(BaseDocument, self).__setattr__(name, value)
+        super(BaseMixin, self).__setattr__(name, value)
 
     def __getattr__(self, name):
         if name == '_id' and 'id' not in self.meta:
             return None
         if name in self._relationships():
             self._load_related(name)
-        return super(BaseDocument, self).__getattr__(name)
+        return super(BaseMixin, self).__getattr__(name)
 
     def __repr__(self):
         parts = ['%s:' % self.__class__.__name__]
@@ -281,34 +273,6 @@ class BaseDocument(with_metaclass(
             if items:
                 self._d_[field_name] = items if field._multi else items[0]
 
-    def save(self, request=None, refresh=True, **kwargs):
-        super(BaseDocument, self).save(refresh=refresh, **kwargs)
-        self._sync_id_field()
-        return self
-
-    def update(self, params, **kw):
-        process_bools(params)
-        _validate_fields(self.__class__, params.keys())
-        pk_field = self.pk_field()
-
-        iter_types = (DictField, ListField)
-        iter_fields = [
-            field for field in self._doc_type.mapping
-            if isinstance(self._doc_type.mapping[field], iter_types)]
-
-        for key, value in params.items():
-            if key == pk_field:
-                continue
-            if key in iter_fields:
-                self.update_iterables(value, key, unique=True, save=False)
-            else:
-                setattr(self, key, value)
-
-        return self.save(**kw)
-
-    def delete(self, request=None):
-        super(BaseDocument, self).delete()
-
     def to_dict(self, include_meta=False, _keys=None, request=None,
                 _depth=None):
         """
@@ -346,7 +310,7 @@ class BaseDocument(with_metaclass(
                     except AttributeError:
                         continue
 
-        data = super(BaseDocument, self).to_dict(include_meta=include_meta)
+        data = super(BaseMixin, self).to_dict(include_meta=include_meta)
         data = {key: val for key, val in data.items()
                 if not key.startswith('__')}
 
@@ -737,6 +701,45 @@ class BaseDocument(with_metaclass(
 
     def _is_created(self):
         return self._created
+
+
+class BaseDocument(with_metaclass(
+        DocTypeMeta,
+        MultiEngineDocMixin, BaseMixin, VersionedMixin, SyncRelatedMixin,
+        DocType)):
+    __abstract__ = True
+
+    @classmethod
+    def _is_abstract(cls):
+        return cls.__dict__.get('__abstract__', False)
+
+    def save(self, request=None, refresh=True, **kwargs):
+        super(BaseMixin, self).save(refresh=refresh, **kwargs)
+        self._sync_id_field()
+        return self
+
+    def update(self, params, **kw):
+        process_bools(params)
+        _validate_fields(self.__class__, params.keys())
+        pk_field = self.pk_field()
+
+        iter_types = (DictField, ListField)
+        iter_fields = [
+            field for field in self._doc_type.mapping
+            if isinstance(self._doc_type.mapping[field], iter_types)]
+
+        for key, value in params.items():
+            if key == pk_field:
+                continue
+            if key in iter_fields:
+                self.update_iterables(value, key, unique=True, save=False)
+            else:
+                setattr(self, key, value)
+
+        return self.save(**kw)
+
+    def delete(self, request=None):
+        super(BaseMixin, self).delete()
 
 
 def _cleaned_query_params(cls, params, strict):

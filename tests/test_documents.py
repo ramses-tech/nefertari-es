@@ -12,7 +12,7 @@ from nefertari_es import documents as docs
 from nefertari_es import fields
 
 
-class TestBaseDocument(object):
+class TestBaseMixin(object):
 
     def test_comparison(self, simple_model):
         item1 = simple_model(name=None)
@@ -34,19 +34,6 @@ class TestBaseDocument(object):
         assert item2 not in items
         item2.name = '1'
         assert item2 in items
-
-    def test_is_abstract(self, simple_model):
-        assert not simple_model._is_abstract()
-
-        class Foo(simple_model):
-            __abstract__ = True
-
-        assert Foo._is_abstract()
-
-        class Bar(Foo):
-            barbar = fields.StringField(primary_key=True)
-
-        assert not Bar._is_abstract()
 
     def test_sync_id_field(self, id_model):
         item = id_model()
@@ -133,34 +120,6 @@ class TestBaseDocument(object):
             parent._load_related('children')
             assert not mock_get.called
             assert parent.children == []
-
-    def test_save(self, person_model):
-        person = person_model(name='foo')
-        person._sync_id_field = Mock()
-        person.save()
-        person._sync_id_field.assert_called_once_with()
-
-    def test_update(self, simple_model):
-        item = simple_model(name='foo', price=123)
-        assert item.name == 'foo'
-        assert item.price == 123
-        item.save = Mock()
-        item.update({'name': 'bar', 'price': 321}, zoo=1)
-        assert item.name == 'foo'
-        assert item.price == 321
-        item.save.assert_called_once_with(zoo=1)
-
-    def test_update(self):
-        class MyModel(docs.BaseDocument):
-            id = fields.IdField(primary_key=True)
-            name = fields.StringField()
-            settings = fields.DictField()
-        MyModel.save = Mock()
-
-        myobj = MyModel(id=4, name='foo')
-        myobj.update({'name': 'bar', 'settings': {'sett1': 'val1'}})
-        assert myobj.name == 'bar'
-        assert myobj.settings == {'sett1': 'val1'}
 
     def test_to_dict(self, simple_model):
         item = simple_model(name='joe', price=42)
@@ -500,6 +459,50 @@ class TestBaseDocument(object):
         assert item._is_created()
         item._created = False
         assert not item._is_created()
+
+
+class TestBaseDocument(object):
+    def test_is_abstract(self, simple_model):
+        assert not simple_model._is_abstract()
+
+        class Foo(simple_model):
+            __abstract__ = True
+
+        assert Foo._is_abstract()
+
+        class Bar(Foo):
+            barbar = fields.StringField(primary_key=True)
+
+        assert not Bar._is_abstract()
+
+    def test_save(self, person_model):
+        person = person_model(name='foo')
+        person._sync_id_field = Mock()
+        person.save()
+        person._sync_id_field.assert_called_once_with()
+
+    def test_update(self, simple_model):
+        item = simple_model(name='foo', price=123)
+        assert item.name == 'foo'
+        assert item.price == 123
+        item.save = Mock()
+        item.update({'name': 'bar', 'price': 321}, zoo=1)
+        assert item.name == 'foo'
+        assert item.price == 321
+        item.save.assert_called_once_with(zoo=1)
+
+    def test_update_with_iterable(self):
+        class MyModel(docs.BaseDocument):
+            id = fields.IdField(primary_key=True)
+            name = fields.StringField()
+            settings = fields.DictField()
+        MyModel.save = Mock()
+
+        myobj = MyModel(id=4, name='foo')
+        myobj.update({'name': 'bar', 'settings': {'sett1': 'val1'}})
+        assert myobj.name == 'bar'
+        assert myobj.settings == {'sett1': 'val1'}
+
 
 
 class TestHelpers(object):

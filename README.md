@@ -6,8 +6,7 @@ Backend and search engine for Nefertari
 Multiple engines:
 
 - Access/query 2nd engine:
-  Maybe we can connect two models like - main model would have ".secondary" attribute which will link to generated secondary model and secondary model will have ".primary" attribute which will lead to promary model. In this case collection query can be performed like "Story.secondary.get_collection()".
-  UPD: If secondary engine is present and some_param is True - query secondary engine. If secondary engine isn't present or some_param is False - query primary engine. Secondary engine should be queried by default if it is present.
+  If secondary engine is present and some_param is True - query secondary engine. If secondary engine isn't present or some_param is False - query primary engine. Secondary engine should be queried by default if it is present.
 
 - Sync primary and secondary engines:
   Engines listen to their own DB signals and run handlers when these signals fire. From these signal handlers, Pyramid events are triggered with generic document data (instance, dict). All engines have handlers for all of these Pyramid events which know how to properpy save/update/delete data in that particular engine. Only secondary engines listen to these events. E.g. object is updates in engine1; signal handler of engine1 fires a Pyramid event; engine2 listens to that event and runs event handler; event handler of engine2 updates its own document with the same ID.
