@@ -182,7 +182,7 @@ class BaseMixin(object):
 
     def __init__(self, *args, **kwargs):
         super(BaseMixin, self).__init__(*args, **kwargs)
-        self._sync_id_field()
+        self._populate_id_field()
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -201,7 +201,7 @@ class BaseMixin(object):
         pk_field = self.pk_field()
         pk = getattr(self, pk_field, None)
         if pk is None:
-            self._sync_id_field()
+            self._populate_id_field()
             pk = getattr(self, pk_field, None)
             if pk is None:
                 return None
@@ -212,8 +212,14 @@ class BaseMixin(object):
 
         return _hasher
 
-    def _sync_id_field(self):
-        """ Copy meta["_id"] to IdField. """
+    def _populate_meta_id(self):
+        """ Copy PK field value to meta["id"]. """
+        pk_value = getattr(self, self.pk_field(), None)
+        if pk_value not in (None, ''):
+            self.meta['id'] = pk_value
+
+    def _populate_id_field(self):
+        """ Copy meta["id"] to IdField. """
         if self.pk_field_type() is IdField:
             pk_field = self.pk_field()
             if not getattr(self, pk_field, None) and self._id is not None:
@@ -717,8 +723,9 @@ class BaseDocument(with_metaclass(
         return cls.__dict__.get('__abstract__', False)
 
     def save(self, request=None, refresh=True, **kwargs):
+        self._populate_meta_id()
         super(BaseDocument, self).save(refresh=refresh, **kwargs)
-        self._sync_id_field()
+        self._populate_id_field()
         return self
 
     def update(self, params, **kw):

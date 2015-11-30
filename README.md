@@ -5,9 +5,6 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Access/query 2nd engine:
-  * Figure out item access because items in different engines will have different ids. Same applies to any filtering using PK field.
-
 - Sync primary and secondary engines:
   Engines listen to their own DB signals and run handlers when these signals fire. From these signal handlers, Pyramid events are triggered with generic document data (instance, dict). All engines have handlers for all of these Pyramid events which know how to properpy save/update/delete data in that particular engine. Only secondary engines listen to these events. E.g. object is updates in engine1; signal handler of engine1 fires a Pyramid event; engine2 listens to that event and runs event handler; event handler of engine2 updates its own document with the same ID.
 

@@ -35,12 +35,22 @@ class TestBaseMixin(object):
         item2.name = '1'
         assert item2 in items
 
-    def test_sync_id_field(self, id_model):
+    def test_populate_id_field(self, id_model):
         item = id_model()
         assert item.id is None
         item._id = 123
-        item._sync_id_field()
+        item._populate_id_field()
         assert item.id == '123'
+
+    def test_populate_meta_id(self, simple_model):
+        item = simple_model()
+        assert item.meta.to_dict() == {}
+        item._populate_meta_id()
+        assert item.meta.to_dict() == {}
+        item.name = 'foo'
+        assert item.meta.to_dict() == {}
+        item._populate_meta_id()
+        assert item.meta.to_dict() == {'id': 'foo'}
 
     def test_setattr_readme_id(self, id_model):
         item = id_model()
@@ -482,9 +492,9 @@ class TestBaseDocument(object):
 
     def test_save(self, person_model):
         person = person_model(name='foo')
-        person._sync_id_field = Mock()
+        person._populate_id_field = Mock()
         person.save()
-        person._sync_id_field.assert_called_once_with()
+        person._populate_id_field.assert_called_once_with()
 
     def test_update(self, simple_model):
         item = simple_model(name='foo', price=123)
