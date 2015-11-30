@@ -173,7 +173,7 @@ class VersionedMixin(object):
 
 
 class BaseMixin(object):
-    _sync_events = True
+    _sync_events = None
     _public_fields = None
     _auth_fields = None
     _hidden_fields = None
