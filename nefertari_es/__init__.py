@@ -85,7 +85,7 @@ Settings = dictset()
 
 
 def includeme(config):
-    pass
+    config.include('nefertari_es.sync_handlers')
 
 
 def setup_database(config):
