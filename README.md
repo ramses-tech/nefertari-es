@@ -5,8 +5,6 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Fix secondary model generation
-
 - Implement missing handlers to sync data from primary to secondary engine. Test data synchronization.
 
 
