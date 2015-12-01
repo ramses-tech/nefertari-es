@@ -20,11 +20,23 @@ def handle_item_created(event):
 
 
 def handle_item_updated(event):
-    pass
+    item = event.item
+    es_model = item.__class__._secondary
+    item_data = item.to_dict(_depth=0)
+    item_data.pop('_type', None)
+    item_pk = item_data.pop('_pk', None)
+    pk_field = es_model.pk_field()
+    es_item = es_model.get_item(**{pk_field: item_pk})
+    es_item.update(item_data)
 
 
 def handle_item_deleted(event):
-    pass
+    item = event.item
+    es_model = item.__class__._secondary
+    pk_field = es_model.pk_field()
+    item_pk = getattr(item, pk_field)
+    es_item = es_model.get_item(**{pk_field: item_pk})
+    es_item.delete()
 
 
 def handle_bulk_updated(event):
