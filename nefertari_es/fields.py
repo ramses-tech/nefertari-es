@@ -236,6 +236,8 @@ class ChoiceField(BaseFieldMixin, field.String):
 
 
 class PickleField(BaseFieldMixin, field.String):
+    _coerce = True
+
     def _to_python(self, data):
         if not data:
             return data

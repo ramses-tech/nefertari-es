@@ -11,7 +11,12 @@ def includeme(config):
 
 
 def handle_item_created(event):
-    pass
+    item = event.item
+    es_model = item.__class__._secondary
+    item_data = item.to_dict(_depth=0)
+    item_data.pop('_type', None)
+    item_data.pop('_pk', None)
+    es_model(**item_data).save()
 
 
 def handle_item_updated(event):

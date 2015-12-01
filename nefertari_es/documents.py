@@ -400,8 +400,8 @@ class BaseMixin(object):
         :returns: Single collection item as an instance of ``cls``.
         """
         kw.setdefault('_raise_on_empty', True)
-        result = cls.get_collection(_limit=1, _item_request=True, **kw)
-        return result[0]
+        items = cls.get_collection(_limit=1, _item_request=True, **kw)
+        return items[0]
 
     @classmethod
     def _update_many(cls, items, params, request=None):
