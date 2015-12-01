@@ -65,19 +65,33 @@ class NonDocumentInheritanceMixin(type):
     fields.
     """
     def __new__(cls, name, bases, attrs):
+        """ Override to fix errors on when inheriting non-doctype.
+
+        Im particular:
+          * Check for all Field instances, move them to mapping and
+            replace attributes with descriptor that raises
+            AttributeError.
+          * Replace all attributes that have names of mapping fields
+            with descriptor that raises AttributeError.
+        """
         new_cls = super(NonDocumentInheritanceMixin, cls).__new__(
             cls, name, bases, attrs)
         mapping = new_cls._doc_type.mapping
 
-        class AttributeErrorDescriptor(object):
+        class AttrErrorDescriptor(object):
             def __get__(self, *args, **kwargs):
                 raise AttributeError
+
         for name, member in inspect.getmembers(new_cls):
             if name.startswith('__') or name in mapping:
                 continue
             if isinstance(member, Field):
                 mapping.field(name, member)
-                setattr(new_cls, name, AttributeErrorDescriptor())
+                setattr(new_cls, name, AttrErrorDescriptor())
+
+        for name in mapping:
+            if hasattr(new_cls, name):
+                setattr(new_cls, name, AttrErrorDescriptor())
 
         return new_cls
 
