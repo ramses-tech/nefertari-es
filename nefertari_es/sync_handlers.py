@@ -21,6 +21,10 @@ def handle_item_created(event):
 
 def handle_item_updated(event):
     item = event.item
+    _update_item(item)
+
+
+def _update_item(item):
     es_model = item.__class__._secondary
     item_data = item.to_dict(_depth=0)
     item_data.pop('_type', None)
@@ -32,6 +36,10 @@ def handle_item_updated(event):
 
 def handle_item_deleted(event):
     item = event.item
+    _delete_item(item)
+
+
+def _delete_item(item):
     es_model = item.__class__._secondary
     pk_field = es_model.pk_field()
     item_pk = getattr(item, pk_field)
@@ -40,8 +48,12 @@ def handle_item_deleted(event):
 
 
 def handle_bulk_updated(event):
-    pass
+    items = event.items or []
+    for item in items:
+        _update_item(item)
 
 
 def handle_bulk_deleted(event):
-    pass
+    items = event.items or []
+    for item in items:
+        _delete_item(item)

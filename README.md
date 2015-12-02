@@ -5,9 +5,9 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- System user generation
 - Implement and test bulk update sync
-- Implement and test bulk delete sync
+- Test create, update, delete, bulkupdate, bulkdelete with mongo engine.
+- Delete and update ES items in bulk in bulkupdate, bulkdelete handlers.
 
 
 Next tasks:
