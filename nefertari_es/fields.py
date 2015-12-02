@@ -51,6 +51,13 @@ class IdField(CustomMappingMixin, BaseFieldMixin, field.String):
     def _empty(self):
         return None
 
+    def _to_python(self, data):
+        try:
+            data = str(data)
+        except:
+            pass
+        return super(IdField, self)._to_python(data)
+
 
 class IntervalField(BaseFieldMixin, field.Integer):
     """ Custom field that stores `datetime.timedelta` instances.

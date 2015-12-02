@@ -6,7 +6,7 @@ from nefertari.utils import (
     split_strip,
 )
 from .documents import BaseDocument
-from .serializers import JSONSerializer
+from .serializers import get_json_serializer
 from .connections import ESHttpConnection
 from .meta import (
     get_document_cls,
@@ -45,6 +45,8 @@ from .fields import (
     PickleField,
 )
 
+from nefertari.engine.common import JSONEncoder
+
 
 __all__ = [
     'BaseDocument',
@@ -73,6 +75,7 @@ __all__ = [
     'is_relationship_field',
     'get_relationship_cls',
     'relationship_fields',
+    'JSONEncoder',
 
     'ListField',
     'ForeignKeyField',
@@ -107,8 +110,9 @@ def setup_database(config):
     # lots of repeated code, plus other engines shouldn't have to know
     # about es - they should just know how to serialize their
     # documents to JSON.
+    serializer_cls = get_json_serializer()
     conn = es_connections.create_connection(
-        serializer=JSONSerializer(),
+        serializer=serializer_cls(),
         connection_class=ESHttpConnection,
         **params)
     setup_index(conn, settings)

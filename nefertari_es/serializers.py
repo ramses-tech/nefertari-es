@@ -1,8 +1,14 @@
-from nefertari.engine.common import (
-    JSONEncoderMixin as NefEncoderMixin)
-
 from elasticsearch_dsl.serializer import AttrJSONSerializer
+from nefertari import engine
 
 
-class JSONSerializer(NefEncoderMixin, AttrJSONSerializer):
-    pass
+def get_json_serializer():
+    if engine.secondary is not None:
+        SerializerBase = engine.primary.JSONEncoder
+    else:
+        SerializerBase = engine.common.JSONEncoderMixin
+
+    class JSONSerializer(SerializerBase, AttrJSONSerializer):
+        pass
+
+    return JSONSerializer
