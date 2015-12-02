@@ -592,14 +592,14 @@ class BaseMixin(object):
         return field in cls._doc_type.mapping
 
     @classmethod
-    def get_or_create(cls, **params):
+    def get_or_create(cls, request=None, **params):
         defaults = params.pop('defaults', {})
         items = cls.get_collection(
             _query_secondary=False, _raise_on_empty=False,
             **params)
         if not items:
             defaults.update(params)
-            return cls(**defaults).save(), True
+            return cls(**defaults).save(request=request), True
         elif len(items) > 1:
             raise JHTTPBadRequest('Bad or Insufficient Params')
         else:

@@ -5,7 +5,9 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Implement missing handlers to sync data from primary to secondary engine. Test data synchronization.
+- System user generation
+- Implement and test bulk update sync
+- Implement and test bulk delete sync
 
 
 Next tasks:
