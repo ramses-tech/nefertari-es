@@ -15,6 +15,7 @@ def handle_item_created(event):
     es_model = item.__class__._secondary
     item_data = item.to_dict(_depth=0)
     item_data.pop('_type', None)
+    item_data.pop('_version', None)
     item_data.pop('_pk', None)
     es_model(**item_data).save()
 
@@ -28,6 +29,7 @@ def _update_item(item):
     es_model = item.__class__._secondary
     item_data = item.to_dict(_depth=0)
     item_data.pop('_type', None)
+    item_data.pop('_version', None)
     item_pk = item_data.pop('_pk', None)
     pk_field = es_model.pk_field()
     es_item = es_model.get_item(**{pk_field: item_pk})

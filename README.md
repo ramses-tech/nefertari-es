@@ -5,15 +5,12 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Test relationships sync with sqla(1. Load value on setattr)
 - Test relationships sync with mongo
 - Delete and update ES items in bulk in bulkupdate, bulkdelete handlers.
 - Test auth
 
 
 Next tasks:
-
-- Using multiple engines.
 
 - Need a way to delegate search to es (or other secondary
   engine?). maybe just call `get_collection` on the generated es

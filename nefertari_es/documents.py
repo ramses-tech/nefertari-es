@@ -49,6 +49,13 @@ class SyncRelatedMixin(object):
 
     def __setattr__(self, name, value):
         if name in self._relationships():
+
+            # Load new value from db
+            data = {name: value}
+            self._load_related(name, container=data)
+            value = data[name]
+
+            # Load existing data from db
             self._load_related(name)
             self._sync_related(
                 new_value=value,
@@ -264,8 +271,11 @@ class BaseMixin(object):
             if items:
                 self._d_[field_name] = items if field._multi else items[0]
 
-    def _load_related(self, field_name):
-        value = field_name in self._d_ and self._d_[field_name]
+    def _load_related(self, field_name, container=None):
+        if container is None:
+            container = self._d_
+
+        value = field_name in container and container[field_name]
         if not value:
             return
 
@@ -279,7 +289,7 @@ class BaseMixin(object):
             items = doc_cls.get_collection(
                 **{pk_field: value, '_query_secondary': False})
             if items:
-                self._d_[field_name] = items if field._multi else items[0]
+                container[field_name] = items if field._multi else items[0]
 
     def to_dict(self, include_meta=False, _keys=None, request=None,
                 _depth=None):
