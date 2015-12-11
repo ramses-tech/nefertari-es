@@ -5,7 +5,7 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Delete and update ES items in bulk in bulkupdate, bulkdelete handlers.
+- Update ES items in bulk in bulkupdate, bulkdelete handlers.
 - Test auth
 
 

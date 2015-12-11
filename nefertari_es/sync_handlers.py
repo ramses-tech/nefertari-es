@@ -38,10 +38,6 @@ def _update_item(item):
 
 def handle_item_deleted(event):
     item = event.item
-    _delete_item(item)
-
-
-def _delete_item(item):
     es_model = item.__class__._secondary
     pk_field = es_model.pk_field()
     item_pk = getattr(item, pk_field)
@@ -57,5 +53,11 @@ def handle_bulk_updated(event):
 
 def handle_bulk_deleted(event):
     items = event.items or []
-    for item in items:
-        _delete_item(item)
+    try:
+        es_model = items[0].__class__._secondary
+    except IndexError:
+        return
+    pk_field = es_model.pk_field()
+    item_ids = [getattr(item, pk_field) for item in items]
+    es_items = es_model.get_collection(**{pk_field: item_ids})
+    es_model._delete_many(es_items)
