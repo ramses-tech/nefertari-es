@@ -5,7 +5,6 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Test relationships sync with mongo
 - Delete and update ES items in bulk in bulkupdate, bulkdelete handlers.
 - Test auth
 
