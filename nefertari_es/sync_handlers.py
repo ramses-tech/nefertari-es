@@ -45,19 +45,45 @@ def handle_item_deleted(event):
     es_item.delete()
 
 
-def handle_bulk_updated(event):
-    items = event.items or []
-    for item in items:
-        _update_item(item)
-
-
-def handle_bulk_deleted(event):
+def _get_es_model(event):
     items = event.items or []
     try:
-        es_model = items[0].__class__._secondary
+        return items[0].__class__._secondary
     except IndexError:
+        return None
+
+
+def _get_es_items(event):
+    items = event.items or []
+    es_model = _get_es_model(event)
+    if es_model is None or not items:
         return
     pk_field = es_model.pk_field()
     item_ids = [getattr(item, pk_field) for item in items]
-    es_items = es_model.get_collection(**{pk_field: item_ids})
-    es_model._delete_many(es_items)
+    return es_model.get_collection(**{pk_field: item_ids})
+
+
+def handle_bulk_updated(event):
+    es_model = _get_es_model(event)
+    es_items = _get_es_items(event)
+    items = event.items or []
+    if not (es_model is not None and es_items and items):
+        return
+    pk_field = es_model.pk_field()
+    items = {str(getattr(item, pk_field)): item for item in items}
+    for es_item in es_items:
+        es_pk = str(getattr(es_item, pk_field))
+        db_item = items[es_pk]
+        db_item_data = db_item.to_dict(_depth=0)
+        db_item_data.pop('_type', None)
+        db_item_data.pop('_version', None)
+        db_item_data.pop('_pk', None)
+        es_item._update(db_item_data)
+    es_model._index_many(es_items, request=event.request)
+
+
+def handle_bulk_deleted(event):
+    es_model = _get_es_model(event)
+    es_items = _get_es_items(event)
+    if es_model is not None and es_items:
+        es_model._delete_many(es_items, request=event.request)

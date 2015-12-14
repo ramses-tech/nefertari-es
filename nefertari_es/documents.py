@@ -415,33 +415,35 @@ class BaseMixin(object):
 
     @classmethod
     def _update_many(cls, items, params, request=None):
-        params = cls._flatten_relationships(params)
-        if not items:
-            return
-
-        actions = [item.to_dict(include_meta=True) for item in items]
-        actions_count = len(actions)
-        for action in actions:
-            action.pop('_source')
-            action['doc'] = params
-        client = items[0].connection
-        operation = partial(
-            _bulk,
-            client=client, op_type='update', request=request)
-        _perform_in_chunks(actions, operation)
-        return actions_count
+        return cls._bulk_operation(items, 'update', request, params)
 
     @classmethod
     def _delete_many(cls, items, request=None):
+        return cls._bulk_operation(items, 'delete', request)
+
+    @classmethod
+    def _index_many(cls, items, request=None):
+        return cls._bulk_operation(items, 'index', request)
+
+    @classmethod
+    def _bulk_operation(cls, items, op_type, request=None, params=None):
+        if params is not None:
+            params = cls._flatten_relationships(params)
+
         if not items:
             return
 
         actions = [item.to_dict(include_meta=True) for item in items]
         actions_count = len(actions)
+        if params is not None:
+            for action in actions:
+                action.pop('_source')
+                action['doc'] = params
+
         client = items[0].connection
         operation = partial(
             _bulk,
-            client=client, op_type='delete', request=request)
+            client=client, op_type=op_type, request=request)
         _perform_in_chunks(actions, operation)
         return actions_count
 

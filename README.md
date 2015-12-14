@@ -5,7 +5,6 @@ Backend and search engine for Nefertari
 
 Multiple engines:
 
-- Update ES items in bulk in bulkupdate handlers.
 - Test auth
 
 
