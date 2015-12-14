@@ -73,9 +73,9 @@ class TestBaseMixin(object):
     @patch('nefertari_es.documents.BaseDocument._load_related')
     def test_getattr_raw(self, mock_load, story_model):
         story = story_model(author=1)
-        assert mock_load.call_count == 1
+        assert mock_load.call_count == 2
         assert story._getattr_raw('author') == 1
-        assert mock_load.call_count == 1
+        assert mock_load.call_count == 2
 
     @patch('nefertari_es.documents.BaseDocument._load_related')
     def test_unload_related(self, mock_load, parent_model, person_model):
@@ -105,23 +105,29 @@ class TestBaseMixin(object):
 
     def test_load_related(self, parent_model, person_model):
         parent = parent_model()
-        parent.children = ['123']
         with patch.object(person_model, 'get_collection') as mock_get:
             mock_get.return_value = ['foo']
+            parent.children = ['123']
+            mock_get.assert_called_with(_query_secondary=False, name=['123'])
+            mock_get.return_value = ['bar']
             parent._load_related('children')
-            mock_get.assert_called_once_with(
-                _query_secondary=False, name=['123'])
-            assert parent.children == ['foo']
+            mock_get.assert_called_with(
+                _query_secondary=False, name=['foo'])
+            assert mock_get.call_count == 2
+            assert parent.children == ['bar']
 
     def test_load_related_no_items(self, parent_model, person_model):
         parent = parent_model()
-        parent.children = ['123']
         with patch.object(person_model, 'get_collection') as mock_get:
             mock_get.return_value = []
+            parent.children = ['123']
+            mock_get.assert_called_with(_query_secondary=False, name=['123'])
+            mock_get.return_value = ['321']
             parent._load_related('children')
-            mock_get.assert_called_once_with(
+            mock_get.assert_called_with(
                 _query_secondary=False, name=['123'])
-            assert parent.children == ['123']
+            assert mock_get.call_count == 2
+            assert parent.children == ['321']
 
     def test_load_related_no_curr_value(
             self, parent_model, person_model):
@@ -699,7 +705,10 @@ class TestSyncRelatedMixin(object):
         item._load_related = Mock()
         item._sync_related = Mock()
         item.author = 1
-        item._load_related.assert_called_once_with('author')
+        item._load_related.assert_has_calls([
+            call('author', container={'author': 1}),
+            call('author'),
+        ])
         item._sync_related.assert_called_once_with(
             new_value=1, old_value=None, field_name='author')
 

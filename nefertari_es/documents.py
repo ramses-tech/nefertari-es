@@ -739,11 +739,8 @@ class BaseDocument(with_metaclass(
         self._populate_id_field()
         return self
 
-    def update(self, params, **kw):
-        process_bools(params)
-        _validate_fields(self.__class__, params.keys())
+    def _update(self, params):
         pk_field = self.pk_field()
-
         iter_types = (DictField, ListField)
         iter_fields = [
             field for field in self._doc_type.mapping
@@ -757,6 +754,10 @@ class BaseDocument(with_metaclass(
             else:
                 setattr(self, key, value)
 
+    def update(self, params, **kw):
+        process_bools(params)
+        _validate_fields(self.__class__, params.keys())
+        self._update(params)
         return self.save(**kw)
 
     def delete(self, request=None):
