@@ -36,7 +36,7 @@ def includeme(config):
     'collection1,collection2,...'
     """
     root = config.get_root_resource()
-    root.add('nef_polymorphic', '{collections:.+,.+}',
+    root.add('nefes_polymorphic', '{collections:.+,.+}',
              view=PolymorphicView,
              factory=PolymorphicACL)
 
