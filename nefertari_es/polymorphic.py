@@ -165,6 +165,6 @@ class PolymorphicView(PolymorphicHelperMixin, BaseView):
         """ Handle collection GET request. """
         self._query_params.process_int_param('_limit', 20)
         models = self.get_es_models()
-        search = Search(doc_type=models)
-
-        return {'collections': []}
+        return BaseDocument.get_collection(
+            search_obj=Search(doc_type=models),
+            **self._query_params)
