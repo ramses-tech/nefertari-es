@@ -505,6 +505,8 @@ class BaseMixin(object):
         :param _search_fields: Coma-separated list of field names to use
             with full-text search(q param) to limit fields which are
             searched.
+        :param search_obj: Instance of elasticsearch_dsl.Search which
+            should be used instead of creating new one with cls.search().
 
         :returns: Query results. May be sorted, offset, limited.
         :returns: Dict of {'field_name': fieldval}, when ``_fields`` param
@@ -536,7 +538,7 @@ class BaseMixin(object):
 
         if _fields:
             include, exclude = process_fields(_fields)
-            if _strict:
+            if _strict and not search_passed:
                 _validate_fields(cls, include + exclude)
             # XXX partial fields support isn't yet released. for now
             # we just use fields, later we'll add support for excluded fields
@@ -547,8 +549,9 @@ class BaseMixin(object):
                       if not key.startswith('__') and val != '_all'}
             # process_lists(params)
             process_bools(params)
-            params = _clean_query_params(cls, params, _strict)
-            params = _rename_pk_param(cls, params)
+            if not search_passed:
+                params = _clean_query_params(cls, params, _strict)
+                params = _rename_pk_param(cls, params)
             params = _restructure_params(params)
             if params:
                 search_obj = search_obj.filter('terms', **params)
@@ -567,10 +570,10 @@ class BaseMixin(object):
 
         if _sort:
             sort_fields = split_strip(_sort)
-            if _strict:
-                _validate_fields(
-                    cls,
-                    [f[1:] if f.startswith('-') else f for f in sort_fields])
+            if _strict and not search_passed:
+                clean_fields = [f[1:] if f.startswith('-') else f
+                                for f in sort_fields]
+                _validate_fields(cls, clean_fields)
             search_obj = search_obj.sort(*sort_fields)
 
         hits = search_obj.execute().hits
