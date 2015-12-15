@@ -89,38 +89,35 @@ Settings = dictset()
 
 def includeme(config):
     config.include('nefertari_es.sync_handlers')
+    settings = dictset(config.registry.settings).mget('elasticsearch')
+    Settings.update(settings)
 
 
 def setup_database(config):
-    settings = dictset(config.registry.settings).mget('elasticsearch')
-    Settings.update(settings)
     params = {}
-    params['chunk_size'] = settings.get('chunk_size', 500)
+    params['chunk_size'] = Settings.get('chunk_size', 500)
     params['hosts'] = []
-    for hp in split_strip(settings['hosts']):
+    for hp in split_strip(Settings['hosts']):
         h, p = split_strip(hp, ':')
         params['hosts'].append(dict(host=h, port=p))
-    if settings.asbool('sniff'):
+    if Settings.asbool('sniff'):
         params['sniff_on_start'] = True
         params['sniff_on_connection_fail'] = True
 
-    # XXX if this connection has to deal with mongo and sqla objects,
-    # then we'll need to use their es serializers instead. should
-    # probably clean up that part of the engine interface - there's
-    # lots of repeated code, plus other engines shouldn't have to know
-    # about es - they should just know how to serialize their
-    # documents to JSON.
     serializer_cls = get_json_serializer()
     conn = es_connections.create_connection(
         serializer=serializer_cls(),
         connection_class=ESHttpConnection,
         **params)
-    setup_index(conn, settings)
+    setup_index(conn)
+
+    if Settings.asbool('enable_polymorphic_query'):
+        config.include('nefertari_es.polymorphic')
 
 
-def setup_index(conn, settings):
+def setup_index(conn):
     from nefertari.json_httpexceptions import JHTTPNotFound
-    index_name = settings['index_name']
+    index_name = Settings['index_name']
     try:
         index_exists = conn.indices.exists([index_name])
     except JHTTPNotFound:
