@@ -26,6 +26,7 @@ from pyramid.security import DENY_ALL, Allow, ALL_PERMISSIONS
 
 from nefertari.view import BaseView
 from nefertari.acl import CollectionACL
+from elasticsearch_dsl import Search
 
 from nefertari_es.documents import BaseDocument
 
@@ -164,5 +165,6 @@ class PolymorphicView(PolymorphicHelperMixin, BaseView):
         """ Handle collection GET request. """
         self._query_params.process_int_param('_limit', 20)
         models = self.get_es_models()
+        search = Search(doc_type=models)
+
         return {'collections': []}
-        # return self.get_collection_es()

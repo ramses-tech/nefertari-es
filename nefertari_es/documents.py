@@ -452,7 +452,7 @@ class BaseMixin(object):
                        _fields=None, _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False, _explain=None,
                        _search_fields=None, q=None, _raise_on_empty=False,
-                       **params):
+                       search_obj=None, **params):
         """ Query collection and return results.
 
         Notes:
@@ -526,7 +526,9 @@ class BaseMixin(object):
             or ``sqlalchemy.exc.IntegrityError`` errors happen during DB
             query.
         """
-        search_obj = cls.search()
+        search_passed = search_obj is not None
+        if not search_passed:
+            search_obj = cls.search()
 
         if _limit is not None:
             _start, limit = process_limit(_start, _page, _limit)
@@ -541,8 +543,13 @@ class BaseMixin(object):
             search_obj = search_obj.fields(include)
 
         if params:
-            params = _cleaned_query_params(cls, params, _strict)
-            params = _restructure_params(cls, params)
+            params = {key: val for key, val in params.items()
+                      if not key.startswith('__') and val != '_all'}
+            # process_lists(params)
+            process_bools(params)
+            params = _clean_query_params(cls, params, _strict)
+            params = _rename_pk_param(cls, params)
+            params = _restructure_params(params)
             if params:
                 search_obj = search_obj.filter('terms', **params)
 
@@ -766,16 +773,7 @@ class BaseDocument(with_metaclass(
         super(BaseDocument, self).delete()
 
 
-def _cleaned_query_params(cls, params, strict):
-    params = {
-        key: val for key, val in params.items()
-        if not key.startswith('__') and val != '_all'
-    }
-
-    # XXX support field__bool and field__in/field__all queries?
-    # process_lists(params)
-    process_bools(params)
-
+def _clean_query_params(cls, params, strict):
     if strict:
         _validate_fields(cls, params.keys())
     else:
@@ -784,17 +782,19 @@ def _cleaned_query_params(cls, params, strict):
         invalid_params = param_names.difference(field_names)
         for key in invalid_params:
             del params[key]
-
     return params
 
 
-def _restructure_params(cls, params):
+def _rename_pk_param(cls, params):
     pk_field = cls.pk_field()
     if pk_field in params:
         field_obj = cls._doc_type.mapping[pk_field]
         if isinstance(field_obj, IdField):
             params['_id'] = params.pop(pk_field)
+    return params
 
+
+def _restructure_params(params):
     for field, param in params.items():
         if not isinstance(param, list):
             params[field] = [param]

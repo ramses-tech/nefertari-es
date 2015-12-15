@@ -528,32 +528,34 @@ class TestBaseDocument(object):
 
 class TestHelpers(object):
     @patch('nefertari_es.documents._validate_fields')
-    def test_cleaned_query_params_strict(self, mock_val, simple_model):
+    def test_clean_query_params_strict(self, mock_val, simple_model):
         params = {
             'name': 'user12',
             'foobar': 'user12',
-            '__id': 2,
             'price': '_all',
         }
-        cleaned = docs._cleaned_query_params(simple_model, params, True)
-        expected = {'name': 'user12', 'foobar': 'user12'}
-        assert cleaned == expected
-        mock_val.assert_called_once_with(simple_model, expected.keys())
+        cleaned = docs._clean_query_params(simple_model, params, True)
+        assert cleaned == params
+        mock_val.assert_called_once_with(simple_model, params.keys())
 
-    def test_cleaned_query_params_not_strict(self, simple_model):
+    def test_clean_query_params_not_strict(self, simple_model):
         params = {
             'name': 'user12',
             'foobar': 'user12',
-            '__id': 2,
             'price': '_all',
         }
-        cleaned = docs._cleaned_query_params(simple_model, params, False)
-        assert cleaned == {'name': 'user12'}
+        cleaned = docs._clean_query_params(simple_model, params, False)
+        assert cleaned == {'name': 'user12', 'price': '_all'}
 
-    def test_restructure_params(self, id_model):
+    def test_rename_pk_param(self, id_model):
         params = {'id': 'foo', 'name': 1}
-        assert docs._restructure_params(id_model, params) == {
-            '_id': ['foo'], 'name': [1]}
+        assert docs._rename_pk_param(id_model, params) == {
+            '_id': 'foo', 'name': 1}
+
+    def test_restructure_params(self):
+        params = {'id': 'foo', 'name': 1}
+        assert docs._restructure_params(params) == {
+            'id': ['foo'], 'name': [1]}
 
     def test_validate_fields_valid(self, simple_model):
         try:
@@ -651,7 +653,7 @@ class TestGetCollection(object):
             'fields': 'name,-price',
         }
 
-    @patch('nefertari_es.documents._cleaned_query_params')
+    @patch('nefertari_es.documents._clean_query_params')
     def test_params_param(self, mock_clean, mock_search, simple_model):
         mock_clean.return_value = {'foo': 1}
         result = simple_model.get_collection(foo=2)
