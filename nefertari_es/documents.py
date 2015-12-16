@@ -588,6 +588,37 @@ class BaseMixin(object):
         return hits
 
     @classmethod
+    def aggregate(cls, _aggs_params, _search_type='count', search_obj=None):
+        """ Perform aggreration
+
+        Arguments:
+            :_aggs_params: Dict of aggregation params. Root key is an
+                aggregation name. Required.
+            :_raise_on_empty: Boolean indicating whether to raise exception
+                when IndexNotFoundException exception happens. Optional,
+                defaults to False.
+            :_search_type: Type of search to use. Optional, defaults to
+                'count'. You might want to provide this argument explicitly
+                when performing nested aggregations on buckets.
+        """
+        if search_obj is None:
+            search_obj = cls.search()
+
+        # Set limit so ES won't complain. It is ignored in the end
+        search_params = {}
+        search_params['search_type'] = _search_type
+        search_params['body']['aggregations'] = _aggs_params
+
+        response = cls.api.search(**search_params)
+
+        try:
+            return response['aggregations']
+        except KeyError:
+            raise JHTTPNotFound('No aggregations returned from ES')
+
+
+
+    @classmethod
     def get_by_ids(cls, ids, **params):
         params[cls.pk_field()] = ids
         return cls.get_collection(**params)

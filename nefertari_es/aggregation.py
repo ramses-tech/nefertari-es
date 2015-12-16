@@ -1,13 +1,7 @@
-import logging
-
 import six
 from nefertari import wrappers
 from nefertari.utils import dictset, validate_data_privacy
-from nefertari.json_httpexceptions import (
-    JHTTPForbidden, JHTTPNotFound)
-
-
-log = logging.getLogger(__name__)
+from nefertari.json_httpexceptions import JHTTPForbidden
 
 
 def setup_aggregation(view, aggregator=None):
@@ -134,42 +128,3 @@ class Aggregator(object):
         return ES(self.view.Model.__name__).aggregate(
             _aggregations_params=aggregations_params,
             **self._query_params)
-
-
-def aggregate(ESinstance, **params):
-    """ Perform aggreration
-
-    Arguments:
-        :_aggregations_params: Dict of aggregation params. Root key is an
-            aggregation name. Required.
-        :_raise_on_empty: Boolean indicating whether to raise exception
-            when IndexNotFoundException exception happens. Optional,
-            defaults to False.
-        :_search_type: Type of search to use. Optional, defaults to
-            'count'. You might want to provide this argument explicitly
-            when performing nested aggregations on buckets.
-    """
-    _aggregations_params = params.pop('_aggregations_params', None)
-    _raise_on_empty = params.pop('_raise_on_empty', False)
-    _search_type = params.pop('_search_type', 'count')
-
-    if not _aggregations_params:
-        raise Exception('Missing _aggregations_params')
-
-    # Set limit so ES won't complain. It is ignored in the end
-    params['_limit'] = 0
-    search_params = ESinstance.build_search_params(params)
-    search_params.pop('size', None)
-    search_params.pop('from_', None)
-    search_params.pop('sort', None)
-
-    search_params['search_type'] = _search_type
-    search_params['body']['aggregations'] = _aggregations_params
-
-    log.debug('Performing aggregation: {}'.format(_aggregations_params))
-    response = ESinstance.api.search(**search_params)
-
-    try:
-        return response['aggregations']
-    except KeyError:
-        raise JHTTPNotFound('No aggregations returned from ES')
