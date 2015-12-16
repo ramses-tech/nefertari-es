@@ -156,7 +156,7 @@ class PolymorphicView(PolymorphicHelperMixin, BaseView):
         models = [mdl for mdl in models if mdl is not None]
         es_models = []
         for model in models:
-            if not isinstance(model, BaseDocument):
+            if not issubclass(model, BaseDocument):
                 model = model._secondary
             es_models.append(model)
         return es_models

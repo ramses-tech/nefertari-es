@@ -116,18 +116,23 @@ class TestPolymorphicView(object):
     @patch.object(polymorphic.PolymorphicView, 'get_resources')
     @patch.object(polymorphic.PolymorphicView, 'get_collections')
     def test_get_es_models(self, mock_coll, mock_res):
+        class StoryFoo(object):
+            _secondary = Mock(__name__='StoryFooSecondary')
+
+        class UserFoo(documents.BaseDocument):
+            pass
+
         mock_coll.return_value = ['stories', 'users']
         stories_res = Mock()
-        stories_res.view.Model = Mock()
-        stories_res.view.Model._secondary.__name__ = 'StoryFoo'
+        stories_res.view.Model = StoryFoo
         users_res = Mock()
-        users_res.view.Model = Mock()
-        users_res.view.Model._secondary.__name__ = 'UserFoo'
+        users_res.view.Model = UserFoo
         mock_res.return_value = [stories_res, users_res]
         view = self._dummy_view()
         models = view.get_es_models()
         assert len(models) == 2
-        assert set([m.__name__ for m in models]) == {'StoryFoo', 'UserFoo'}
+        assert set([m.__name__ for m in models]) == {
+            'StoryFooSecondary', 'UserFoo'}
         mock_coll.assert_called_with()
         mock_res.assert_called_with(['stories', 'users'])
 
