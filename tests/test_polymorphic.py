@@ -1,7 +1,7 @@
 from mock import Mock, patch
 from nefertari.renderers import _JSONEncoder
 
-from nefertari_es import polymorphic
+from nefertari_es import polymorphic, documents
 
 
 class TestPolymorphicHelperMixin(object):
@@ -93,57 +93,54 @@ class TestPolymorphicACL(object):
         assert mock_aces.call_count == 1
 
 
-class TestPolymorphicESView(object):
+class TestPolymorphicView(object):
 
-    class DummyPolymorphicESView(polymorphic.PolymorphicESView):
+    class DummyPolymorphicView(polymorphic.PolymorphicView):
         _json_encoder = _JSONEncoder
 
     def _dummy_view(self):
         request = Mock(content_type='', method='', accept=[''], user=None)
-        return self.DummyPolymorphicESView(
+        return self.DummyPolymorphicView(
             context={}, request=request,
             _json_params={'foo': 'bar'},
             _query_params={'foo1': 'bar1'})
 
-    @patch.object(polymorphic.PolymorphicESView, 'determine_types')
-    def test_ini(self, mock_det):
-        from nefertari.utils import dictset
-        mock_det.return_value = ['story', 'user']
-        view = self._dummy_view()
-        mock_det.assert_called_once_with()
-        assert isinstance(view.Model, dictset)
-        assert dict(view.Model) == {'__name__': 'story,user'}
-
-    @patch.object(polymorphic.PolymorphicESView, 'determine_types')
-    @patch.object(polymorphic.PolymorphicESView, 'set_public_limits')
-    @patch.object(polymorphic.PolymorphicESView, 'setup_default_wrappers')
-    def test_run_init_actions(self, mock_wraps, mock_lims, mock_det):
+    @patch.object(polymorphic.PolymorphicView, 'get_es_models')
+    @patch.object(polymorphic.PolymorphicView, 'set_public_limits')
+    @patch.object(polymorphic.PolymorphicView, 'setup_default_wrappers')
+    def test_run_init_actions(self, mock_wraps, mock_lims, mock_get):
         self._dummy_view()
         mock_wraps.assert_called_once_with()
         mock_lims.assert_called_once_with()
 
-    @patch.object(polymorphic.PolymorphicESView, 'get_resources')
-    @patch.object(polymorphic.PolymorphicESView, 'get_collections')
-    def test_determine_types(self, mock_coll, mock_res):
+    @patch.object(polymorphic.PolymorphicView, 'get_resources')
+    @patch.object(polymorphic.PolymorphicView, 'get_collections')
+    def test_get_es_models(self, mock_coll, mock_res):
         mock_coll.return_value = ['stories', 'users']
         stories_res = Mock()
-        stories_res.view.Model = Mock(
-            __name__='StoryFoo', _index_enabled=True)
+        stories_res.view.Model = Mock()
+        stories_res.view.Model._secondary.__name__ = 'StoryFoo'
         users_res = Mock()
-        users_res.view.Model = Mock(
-            __name__='UserFoo', _index_enabled=False)
+        users_res.view.Model = Mock()
+        users_res.view.Model._secondary.__name__ = 'UserFoo'
         mock_res.return_value = [stories_res, users_res]
         view = self._dummy_view()
-        types = view.determine_types()
-        assert types == ['StoryFoo']
+        models = view.get_es_models()
+        assert len(models) == 2
+        assert set([m.__name__ for m in models]) == {'StoryFoo', 'UserFoo'}
         mock_coll.assert_called_with()
         mock_res.assert_called_with(['stories', 'users'])
 
-    @patch.object(polymorphic.PolymorphicESView, 'get_collection_es')
-    @patch.object(polymorphic.PolymorphicESView, 'determine_types')
-    def test_index(self, mock_det, mock_get):
+    @patch.object(polymorphic, 'Search')
+    @patch.object(polymorphic, 'BaseDocument')
+    @patch.object(polymorphic.PolymorphicView, 'get_es_models')
+    def test_index(self, mock_get, mock_doc, mock_search):
         view = self._dummy_view()
-        response = view.index('foo')
-        mock_get.assert_called_once_with()
-        assert response == mock_get()
+        response = view.index('zoo')
         assert view._query_params['_limit'] == 20
+        mock_get.assert_called_once_with()
+        mock_search.assert_called_once_with(doc_type=mock_get())
+        mock_doc.get_collection.assert_called_once_with(
+            search_obj=mock_search(),
+            _limit=20, foo1='bar1')
+        assert response == mock_doc.get_collection()
