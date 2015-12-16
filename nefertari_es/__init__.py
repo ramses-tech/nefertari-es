@@ -84,23 +84,24 @@ __all__ = [
 ]
 
 
+ESSettings = dictset()
 Settings = dictset()
 
 
 def includeme(config):
     config.include('nefertari_es.sync_handlers')
-    settings = dictset(config.registry.settings).mget('elasticsearch')
-    Settings.update(settings)
+    Settings.update(dictset(config.registry.settings))
+    ESSettings.update(Settings.mget('elasticsearch'))
 
 
 def setup_database(config):
     params = {}
-    params['chunk_size'] = Settings.get('chunk_size', 500)
+    params['chunk_size'] = ESSettings.get('chunk_size', 500)
     params['hosts'] = []
-    for hp in split_strip(Settings['hosts']):
+    for hp in split_strip(ESSettings['hosts']):
         h, p = split_strip(hp, ':')
         params['hosts'].append(dict(host=h, port=p))
-    if Settings.asbool('sniff'):
+    if ESSettings.asbool('sniff'):
         params['sniff_on_start'] = True
         params['sniff_on_connection_fail'] = True
 
@@ -111,13 +112,13 @@ def setup_database(config):
         **params)
     setup_index(conn)
 
-    if Settings.asbool('enable_polymorphic_query'):
+    if ESSettings.asbool('enable_polymorphic_query'):
         config.include('nefertari_es.polymorphic')
 
 
 def setup_index(conn):
     from nefertari.json_httpexceptions import JHTTPNotFound
-    index_name = Settings['index_name']
+    index_name = ESSettings['index_name']
     try:
         index_exists = conn.indices.exists([index_name])
     except JHTTPNotFound:
