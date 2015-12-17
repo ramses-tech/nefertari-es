@@ -7,7 +7,7 @@ from nefertari_es.fields import (
     IntegerField,
     IdField,
     Relationship,
-    )
+)
 
 
 class FakeConnection(object):
@@ -15,13 +15,15 @@ class FakeConnection(object):
         m = Mock()
         m.index = Mock(return_value={'created': None})
         return m
+
     def _get_index(self, index=None):
         return Mock()
+
 
 @pytest.fixture
 def simple_model(request):
     class Item(BaseDocument):
-        name = StringField(primary_key=True)
+        name = StringField(primary_key=True, required=True)
         price = IntegerField()
         connection = property(Mock())
     return Item
@@ -43,11 +45,16 @@ def tag_model():
 
 
 @pytest.fixture
-def story_model():
+def story_model(person_model, tag_model):
     class Story(BaseDocument):
         name = StringField(primary_key=True)
-        author = Relationship(document_type='Person', uselist=False)
-        tags = Relationship(document_type='Tag', uselist=True)
+        author = Relationship(
+            document='Person', uselist=False,
+            backref_name='story')
+        tags = Relationship(
+            document='Tag', uselist=True,
+            backref_name='stories',
+            backref_uselist=True)
     return Story
 
 
@@ -58,13 +65,13 @@ def id_model():
         id = IdField()
     return Doc
 
+
 @pytest.fixture
-def parent_model():
+def parent_model(person_model):
     class Parent(FakeConnection, BaseDocument):
         name = StringField(primary_key=True)
         children = Relationship(
-            document_type='Person',
+            document='Person',
             uselist=True,
-            backref_name='parent'
-            )
+            backref_name='parent')
     return Parent

@@ -2,46 +2,52 @@
 
 Backend and search engine for Nefertari
 
-## TODO
 
-Some issues to get basic engine working
+Next tasks:
 
-- finish implementing relationship fields.
+- Find a way to specify/use multiple engines at once.
 
-  - implement ondelete and onupdate?
-
-  - improve efficiency of saving and loading of related objects. maybe
-    lazy or bulk loading of related objects. Maybe check related
-    objects to see if they are dirty before saving them.
-
-  - there is an issue where obj `_id`s are not available until the
-    objects are saved. so when saving related objects you can't put
-    the backref id in place until after the referring object is
-    saved. thus the first time you save an object with backrefs to it,
-    the backrefs won't be saved.
-
-- tests - we need test relationship fields.
-
-
-Later move all es search from other engines and nefertari to this
-package:
-
-- Move existing es integration out of nefertari (and other engines)
-  into es engine
-
-- need a way to generate an es model or mapping given an sql or mongo
-  model. this shouldn't be too hard, since the field names are mostly
-  the same.
-
-- try to re-use existing part of the es engine. for example, probably
-  can re-use exiting base classes and fields in order to recreate
-  something like the existing `get_es_mapping`.
-
-- need a way to delegate search to es (or other secondary
+- Need a way to delegate search to es (or other secondary
   engine?). maybe just call `get_collection` on the generated es
   model.
 
-- will still need hooks in sql and mongo engines to update es models
+- Need a way to generate an es model or mapping given an sql or mongo
+  model. this shouldn't be too hard, since the field names are mostly
+  the same.
+
+- Try to re-use existing part of the es engine. for example, probably
+  can re-use exiting base classes and fields in order to recreate
+  something like the existing `get_es_mapping`.
+
+- Will still need hooks in sql and mongo engines to update es models
   when models are changed. it might make sense to change these hooks
   to generate pyramid events. then the es engine can listen for these
   events, thus de-coupling the engines.
+
+- Aggregations
+
+- Multi-collection requests
+
+- Rework es.py script in nefertari to work with nefertari-es (indexing
+  all documents and missing documents)
+
+- Update Ramses to work with multiple engines properly. ramses-example
+  should work with nefertari-es and multiple engines.
+
+- Docstrings
+
+
+
+Advanced tasks:
+
+- Unique constraint on PK fields?
+
+- Make nefertari-es work with token auth
+
+- Make nefertari-es work wirh nefertari-guards
+
+- Caching of loaded ES documents
+
+- Make relationships sync work on _update_many/_delete_many
+
+- Implement ondelete/onupdate hooks for relationships

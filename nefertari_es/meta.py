@@ -1,7 +1,8 @@
-from weakref import WeakValueDictionary
+import inspect
 
 from elasticsearch_dsl import Index
-from elasticsearch_dsl.document import DocTypeMeta
+from elasticsearch_dsl.document import DocTypeMeta as ESDocTypeMeta
+from elasticsearch_dsl.field import Field
 
 # BaseDocument subclasses registry
 # maps class names to classes
@@ -44,23 +45,48 @@ def get_document_classes():
     return _document_registry.copy()
 
 
-class RegisteredDocMeta(DocTypeMeta):
-    """ Metaclass that registers defined doctypes in
+class RegisteredDocMixin(type):
+    """ Metaclass mixin that registers defined doctypes in
     ``_document_registry``.
     """
     def __new__(cls, name, bases, attrs):
-        new_class = super(RegisteredDocMeta, cls).__new__(
+        new_class = super(RegisteredDocMixin, cls).__new__(
             cls, name, bases, attrs)
         _document_registry[new_class.__name__] = new_class
         return new_class
 
 
-class BackrefGeneratingDocMeta(RegisteredDocMeta):
+class NonDocumentInheritanceMixin(type):
+    """ Metaclass mixin that adds class attribute fields to mapping
+    of they are not there yet.
+
+    Is useful when inheriting non-DocType subclasses which define
+    fields.
+    """
+    def __new__(cls, name, bases, attrs):
+        new_cls = super(NonDocumentInheritanceMixin, cls).__new__(
+            cls, name, bases, attrs)
+        mapping = new_cls._doc_type.mapping
+
+        class AttributeErrorDescriptor(object):
+            def __get__(self, *args, **kwargs):
+                raise AttributeError
+        for name, member in inspect.getmembers(new_cls):
+            if name.startswith('__') or name in mapping:
+                continue
+            if isinstance(member, Field):
+                mapping.field(name, member)
+                setattr(new_cls, name, AttributeErrorDescriptor())
+
+        return new_cls
+
+
+class BackrefGeneratingDocMixin(type):
+    """ Metaclass mixin that generates relationship backrefs. """
     def __new__(cls, name, bases, attrs):
         from .fields import Relationship
-        new_class = super(BackrefGeneratingDocMeta, cls).__new__(
+        new_class = super(BackrefGeneratingDocMixin, cls).__new__(
             cls, name, bases, attrs)
-        new_class._cache = WeakValueDictionary()
 
         relationships = new_class._relationships()
         for name in relationships:
@@ -72,7 +98,31 @@ class BackrefGeneratingDocMeta(RegisteredDocMeta):
             field_name = backref_kwargs.pop('name')
             backref_kwargs.setdefault('uselist', False)
             backref_field = Relationship(
-                new_class.__name__, is_backref=True, **backref_kwargs)
+                new_class.__name__, **backref_kwargs)
+            backref_field._back_populates = name
             target_cls._doc_type.mapping.field(field_name, backref_field)
+            field._back_populates = field_name
 
         return new_class
+
+
+class GenerateMetaMixin(type):
+    """ Metaclass mixin that generates Meta class attribute. """
+    def __new__(cls, name, bases, attrs):
+        if 'Meta' not in attrs:
+
+            class Meta(object):
+                doc_type = name
+
+            attrs['Meta'] = Meta
+        return super(GenerateMetaMixin, cls).__new__(
+            cls, name, bases, attrs)
+
+
+class DocTypeMeta(
+        GenerateMetaMixin,
+        NonDocumentInheritanceMixin,
+        RegisteredDocMixin,
+        BackrefGeneratingDocMixin,
+        ESDocTypeMeta):
+    pass

@@ -1,11 +1,7 @@
 import datetime
 from dateutil import parser
 
-import six
-from elasticsearch_dsl import (
-    field,
-    DocType,
-    )
+from elasticsearch_dsl import field
 from elasticsearch_dsl.exceptions import ValidationException
 from elasticsearch_dsl.utils import AttrList, AttrDict
 
@@ -27,11 +23,19 @@ class CustomMappingMixin(object):
 
 
 class BaseFieldMixin(object):
+    _valid_kwargs = ('primary_key', 'required', 'multi')
+
     def __init__(self, *args, **kwargs):
+        self._init_kwargs = kwargs.copy()
+        kwargs = self.drop_invalid_kwargs(kwargs)
         self._primary_key = kwargs.pop('primary_key', False)
         if self._primary_key:
             kwargs['required'] = True
         super(BaseFieldMixin, self).__init__(*args, **kwargs)
+
+    def drop_invalid_kwargs(self, kwargs):
+        return {key: val for key, val in kwargs.items()
+                if key in self._valid_kwargs}
 
 
 class IdField(CustomMappingMixin, BaseFieldMixin, field.String):
@@ -62,9 +66,18 @@ class IntervalField(BaseFieldMixin, field.Integer):
         return super(IntervalField, self)._to_python(data)
 
 
+class CustomInnerObjectWrapper(field.InnerObjectWrapper):
+    def to_dict(self, *args, **kwargs):
+        return super(CustomInnerObjectWrapper, self).to_dict()
+
+
 class DictField(CustomMappingMixin, BaseFieldMixin, field.Object):
     name = 'dict'
     _custom_mapping = {'type': 'object', 'enabled': False}
+
+    def __init__(self, *args, **kwargs):
+        super(DictField, self).__init__(*args, **kwargs)
+        self._doc_class = CustomInnerObjectWrapper
 
 
 class DateTimeField(CustomMappingMixin, BaseFieldMixin, field.Field):
@@ -151,20 +164,27 @@ class DecimalField(BaseFieldMixin, field.Double):
     pass
 
 
-class ReferenceField(CustomMappingMixin, field.String):
+class ReferenceField(BaseFieldMixin, field.String):
     _backref_prefix = 'backref_'
     _coerce = False
+    _back_populates = None
+    _valid_kwargs = ('required', 'multi')
 
-    def __init__(self, doc_class, is_backref=False, *args, **kwargs):
+    def __init__(self, doc_class, *args, **kwargs):
         prefix_len = len(self._backref_prefix)
         self._backref_kwargs = {
             key[prefix_len:]: val for key, val in kwargs.items()
             if key.startswith(self._backref_prefix)}
         for key in self._backref_kwargs:
             del kwargs[self._backref_prefix + key]
-        self._is_backref = is_backref
         self._doc_class = doc_class
         super(ReferenceField, self).__init__(*args, **kwargs)
+
+    def drop_invalid_kwargs(self, kwargs):
+        valid_kw = list(self._valid_kwargs)
+        valid_kw += [self._backref_prefix + key for key in valid_kw]
+        return {key: val for key, val in kwargs.items()
+                if key in valid_kw}
 
     @property
     def _doc_class(self):
@@ -186,14 +206,41 @@ class ReferenceField(CustomMappingMixin, field.String):
             return data
         return super(ReferenceField, self).clean(data)
 
-    def _backref_field_name(self):
-        return self._backref_kwargs.get('name')
 
-
-def Relationship(document_type, uselist=True, nested=True, **kw):
+def Relationship(document, **kwargs):
     # XXX deal with updating, deleting rules
+    _init_kwargs = kwargs.copy()
+    _init_kwargs['document'] = document
+    kwargs['multi'] = kwargs.pop('uselist', True)
+    kwargs['doc_class'] = document
+    field = ReferenceField(**kwargs)
+    field._init_kwargs = _init_kwargs
+    return field
 
-    return ReferenceField(
-        multi=uselist,
-        doc_class=document_type,
-        **kw)
+
+# Naive versions of fields needed to test example projects
+
+class ListField(BaseFieldMixin, field.String):
+    def __init__(self, *args, **kwargs):
+        kwargs['multi'] = True
+        super(ListField, self).__init__(*args, **kwargs)
+
+
+class ForeignKeyField(BaseFieldMixin, field.String):
+    pass
+
+
+class ChoiceField(BaseFieldMixin, field.String):
+    pass
+
+
+class PickleField(BaseFieldMixin, field.String):
+    def _to_python(self, data):
+        if not data:
+            return data
+
+        import pickle
+        import six
+        if isinstance(data, six.binary_type):
+            return pickle.loads(data)
+        return pickle.dumps(data)

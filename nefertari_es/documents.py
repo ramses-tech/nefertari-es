@@ -1,36 +1,215 @@
+from functools import partial
+import copy
+
 from six import (
-    add_metaclass,
-    string_types,
-    )
+    with_metaclass,
+)
 from elasticsearch_dsl import DocType
 from elasticsearch_dsl.utils import AttrList, AttrDict
+from elasticsearch_dsl.field import InnerObjectWrapper
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
     JHTTPNotFound,
-    )
+)
 from nefertari.utils import (
     process_fields,
     process_limit,
     dictset,
-    drop_reserved_params,
     split_strip,
-    )
-from .meta import BackrefGeneratingDocMeta
-from .fields import ReferenceField, IdField
+)
+from .meta import DocTypeMeta
+from .fields import (
+    ReferenceField, IdField, DictField, ListField,
+    IntegerField,
+)
 
 
-@add_metaclass(BackrefGeneratingDocMeta)
-class BaseDocument(DocType):
+class SyncRelatedMixin(object):
+    _backref_hooks = ()
+    _created = False
 
+    def __init__(self, *args, **kwargs):
+        _created = 'meta' not in kwargs
+        super(SyncRelatedMixin, self).__init__(*args, **kwargs)
+        if not _created:
+            return
+        for field_name in self._relationships():
+            if field_name not in kwargs:
+                continue
+            new_value = kwargs[field_name]
+            if new_value not in ([], {}, None):
+                field_obj = self._doc_type.mapping[field_name]
+                self._d_[field_name] = field_obj.empty()
+                setattr(self, field_name, new_value)
+        self._created = _created
+
+    def __setattr__(self, name, value):
+        if name in self._relationships():
+            self._load_related(name)
+            self._sync_related(
+                new_value=value,
+                old_value=self._d_.get(name),
+                field_name=name)
+        super(SyncRelatedMixin, self).__setattr__(name, value)
+
+    def _sync_related(self, new_value, old_value, field_name):
+        field = self._doc_type.mapping[field_name]
+        if not field._back_populates:
+            return
+        if not isinstance(new_value, (list, AttrList)):
+            new_value = [new_value] if new_value else []
+        if not isinstance(old_value, (list, AttrList)):
+            old_value = [old_value] if old_value else []
+
+        added_values = set(new_value) - set(old_value)
+        deleted_values = set(old_value) - set(new_value)
+
+        if added_values:
+            for val in added_values:
+                self._register_addition_hook(val, field._back_populates)
+
+        if deleted_values:
+            for val in deleted_values:
+                self._register_deletion_hook(val, field._back_populates)
+
+    @staticmethod
+    def _addition_hook(_item, _add_item, _field_name):
+        field = _item._doc_type.mapping[_field_name]
+        curr_val = getattr(_item, _field_name, None)
+        if field._multi:
+            new_val = list(curr_val or [])
+            if _add_item not in new_val:
+                new_val.append(_add_item)
+        else:
+            new_val = (_add_item if _add_item != curr_val
+                       else curr_val)
+
+        value_changed = (
+            (field._multi and set(curr_val or []) != set(new_val)) or
+            (not field._multi and curr_val != new_val))
+        if value_changed:
+            _item.update({_field_name: new_val})
+
+    def _register_addition_hook(self, item, field_name):
+        """ Register hook to add `self` to `item` field `field_name`. """
+        _hook = partial(
+            self.__class__._addition_hook,
+            _item=item,
+            _add_item=self,
+            _field_name=field_name)
+        self._backref_hooks += (_hook,)
+
+    @staticmethod
+    def _deletion_hook(_item, _del_item, _field_name):
+        curr_val = getattr(_item, _field_name, None)
+        if not curr_val:
+            return
+
+        field = _item._doc_type.mapping[_field_name]
+        if field._multi:
+            new_val = list(curr_val or [])
+            if _del_item in new_val:
+                new_val.remove(_del_item)
+        else:
+            new_val = (None if _del_item == curr_val
+                       else curr_val)
+
+        value_changed = (
+            (field._multi and set(curr_val or []) != set(new_val)) or
+            (not field._multi and curr_val != new_val))
+        if value_changed:
+            _item.update({_field_name: new_val})
+
+    def _register_deletion_hook(self, item, field_name):
+        """ Register hook to delete `self` from `item` field
+        `field_name`.
+        """
+        _hook = partial(
+            self.__class__._deletion_hook,
+            _item=item,
+            _del_item=self,
+            _field_name=field_name)
+        self._backref_hooks += (_hook,)
+
+    def save(self, *args, **kwargs):
+        try:
+            obj = super(SyncRelatedMixin, self).save(*args, **kwargs)
+        except:
+            raise
+        else:
+            for hook in self._backref_hooks:
+                hook()
+            self._backref_hooks = ()
+            return obj
+
+
+class VersionedMixin(object):
+    """ Mixin that adds "version" field. """
+    version = IntegerField()
+
+    def _bump_version(self):
+        if self._is_modified():
+            self.version = (self.version or 0) + 1
+
+    def save(self, *args, **kwargs):
+        self._bump_version()
+        return super(VersionedMixin, self).save(*args, **kwargs)
+
+    @classmethod
+    def get_null_values(cls):
+        null_values = super(VersionedMixin, cls).get_null_values()
+        null_values.pop('version', None)
+        return null_values
+
+    def __repr__(self):
+        name = super(VersionedMixin, self).__repr__()
+        if hasattr(self, 'version'):
+            name.replace('>', ', v=%s>' % self.version)
+        return name
+
+
+class BaseDocument(with_metaclass(
+        DocTypeMeta,
+        VersionedMixin, SyncRelatedMixin, DocType)):
     _public_fields = None
     _auth_fields = None
     _hidden_fields = None
     _nested_relationships = ()
+    _nesting_depth = 1
+    _request = None
 
     def __init__(self, *args, **kwargs):
         super(BaseDocument, self).__init__(*args, **kwargs)
         self._sync_id_field()
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            pk_field = self.pk_field()
+            self_pk = getattr(self, pk_field, None)
+            other_pk = getattr(other, pk_field, None)
+            return (self_pk is not None and other_pk is not None
+                    and self_pk == other_pk)
+        return super(BaseDocument, self).__eq__(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    @property
+    def __hash__(self):
+        pk_field = self.pk_field()
+        pk = getattr(self, pk_field, None)
+        if pk is None:
+            self._sync_id_field()
+            pk = getattr(self, pk_field, None)
+            if pk is None:
+                return None
+
+        def _hasher():
+            cls_name = self.__class__.__name__
+            return hash(cls_name + str(pk))
+
+        return _hasher
 
     def _sync_id_field(self):
         """ Copy meta["_id"] to IdField. """
@@ -47,140 +226,125 @@ class BaseDocument(DocType):
     def __getattr__(self, name):
         if name == '_id' and 'id' not in self.meta:
             return None
+        if name in self._relationships():
+            self._load_related(name)
         return super(BaseDocument, self).__getattr__(name)
 
-    @classmethod
-    def _save_relationships(cls, data):
-        """ Go through relationship instances and save them, so that
-        changes aren't lost, and so that fresh instances get ids
-        """
-        # XXX should check to see if related objects are dirty before
-        # saving, but I don't think that es-dsl keeps track of
-        # dirty/clean
-        for field in cls._relationships():
-            if field not in data:
-                continue
-            value = data[field]
-            if not isinstance(value, (list, AttrList)):
-                value = [value]
-            return [
-                obj.save(relationship=True)
-                for obj in value if hasattr(obj, 'save')
-                ]
+    def __repr__(self):
+        parts = ['%s:' % self.__class__.__name__]
+        pk_field = self.pk_field()
+        parts.append('{}={}'.format(pk_field, getattr(self, pk_field)))
+        return '<%s>' % ', '.join(parts)
 
-    def _set_backrefs(self):
-        #if not self._id:
-        #    return
-        for name in self._relationships():
-            field = self._doc_type.mapping[name]
-            backref = field._backref_field_name()
-            if not backref:
-                continue
-            if not name in self:
-                continue
-            value = self[name]
-            if not isinstance(value, (list, AttrList)):
-                value = [value]
-            for obj in value:
-                obj[backref] = self
+    def _getattr_raw(self, name):
+        return self._d_[name]
 
-    @classmethod
-    def from_es(cls, hit):
-        inst = super(BaseDocument, cls).from_es(hit)
-        id = inst[cls.pk_field()]
-        if not id in cls._cache:
-            cls._cache[id] = inst
-        if '_source' not in hit:
-            return inst
-        doc = hit['_source']
+    def _unload_related(self, field_name):
+        value = field_name in self._d_ and self._d_[field_name]
+        if not value:
+            return
 
-        relationship_fields = cls._relationships()
-        for name in relationship_fields:
-            if name not in doc:
-                continue
-            field = cls._doc_type.mapping[name]
-            doc_class = field._doc_class
-            types = (doc_class, AttrDict)
-            data = doc[name]
+        field = self._doc_type.mapping[field_name]
+        doc_cls = field._doc_class
+        if not isinstance(value, (list, AttrList)):
+            value = [value]
 
-            single_pk = not field._multi and not isinstance(data, types)
-            if single_pk:
-                pk_field = doc_class.pk_field()
-                inst[name] = doc_class.get_item(**{pk_field: data})
+        if isinstance(value[0], doc_cls):
+            pk_field = doc_cls.pk_field()
+            items = [getattr(item, pk_field, None) for item in value]
+            items = [item for item in items if item is not None]
+            if items:
+                self._d_[field_name] = items if field._multi else items[0]
 
-            multi_pk = field._multi and not isinstance(data[0], types)
-            if multi_pk:
-                pk_field = doc_class.pk_field()
-                inst[name] = doc_class.get_collection(**{pk_field: data})
+    def _load_related(self, field_name):
+        value = field_name in self._d_ and self._d_[field_name]
+        if not value:
+            return
 
-        return inst
+        field = self._doc_type.mapping[field_name]
+        doc_cls = field._doc_class
+        if not isinstance(value, (list, AttrList)):
+            value = [value]
 
-    def save(self, request=None, relationship=False):
-        self._set_backrefs()
-        if not relationship:
-            self._save_relationships(self._d_)
-        super(BaseDocument, self).save()
+        if not isinstance(value[0], doc_cls):
+            pk_field = doc_cls.pk_field()
+            items = doc_cls.get_collection(**{pk_field: value})
+            if items:
+                self._d_[field_name] = items if field._multi else items[0]
+
+    def save(self, request=None, refresh=True, **kwargs):
+        super(BaseDocument, self).save(refresh=refresh, **kwargs)
         self._sync_id_field()
         return self
 
-    def update(self, params, request=None):
-        self._save_relationships(params)
-        params = self._flatten_relationships(params)
-        super(BaseDocument, self).update(**params)
-        return self
+    def update(self, params, **kw):
+        process_bools(params)
+        _validate_fields(self.__class__, params.keys())
+        pk_field = self.pk_field()
+
+        iter_types = (DictField, ListField)
+        iter_fields = [
+            field for field in self._doc_type.mapping
+            if isinstance(self._doc_type.mapping[field], iter_types)]
+
+        for key, value in params.items():
+            if key == pk_field:
+                continue
+            if key in iter_fields:
+                self.update_iterables(value, key, unique=True, save=False)
+            else:
+                setattr(self, key, value)
+
+        return self.save(**kw)
 
     def delete(self, request=None):
         super(BaseDocument, self).delete()
 
-    def to_dict(self, include_meta=False, _keys=None, request=None):
-        # avoid serializing backrefs (which leads to endless recursion)
-        backrefs = {}
-        for name in self._doc_type.mapping:
-            field = self._doc_type.mapping[name]
-            if isinstance(field, ReferenceField) and field._is_backref:
-                if name in self._d_:
-                    inst = self._d_[name]
-                    backrefs[name] = inst
-                    key = inst.pk_field()
-                    self._d_[name] = inst[key]
+    def to_dict(self, include_meta=False, _keys=None, request=None,
+                _depth=None):
+        """
+        DocType and nefertari both expect a to_dict method, but
+        they expect it to act differently. DocType uses to_dict for
+        serialize for saving to es. nefertari uses it to serialize
+        for serving JSON to the client. For now we differentiate by
+        looking for a request argument. If it's present we assume
+        that we're serving JSON to the client, otherwise we assume
+        that we're saving to es
+        """
+        if _depth is None:
+            _depth = self._nesting_depth
+        depth_reached = _depth is not None and _depth <= 0
+        if request is None:
+            request = self._request
+
+        for name in self._relationships():
+            include = (request is not None and
+                       name in self._nested_relationships and
+                       not depth_reached)
+            if not include:
+                self._unload_related(name)
+                continue
+
+            # Related document is implicitly loaded on __getattr__
+            value = getattr(self, name)
+            if value:
+                if not isinstance(value, (list, AttrList)):
+                    value = [value]
+                for val in value:
+                    try:
+                        val._nesting_depth = _depth - 1
+                        val._request = request
+                    except AttributeError:
+                        continue
 
         data = super(BaseDocument, self).to_dict(include_meta=include_meta)
+        data = {key: val for key, val in data.items()
+                if not key.startswith('__')}
 
-        # put backrefs back
-        for name, obj in backrefs.items():
-            self._d_[name] = obj
-
-        # XXX DocType and nefertari both expect a to_dict method, but
-        # they expect it to act differently. DocType uses to_dict for
-        # serialize for saving to es. nefertari uses it to serialize
-        # for serving JSON to the client. For now we differentiate by
-        # looking for a request argument. If it's present we assume
-        # that we're serving JSON to the client, otherwise we assume
-        # that we're saving to es
-        if request is not None:
-            # add some nefertari metadata
+        if request is not None and '_type' not in data:
             data['_type'] = self.__class__.__name__
+        if request is not None:
             data['_pk'] = str(getattr(self, self.pk_field()))
-
-        # replace referenced instances with their ids when saving to
-        # es
-        for name in self._relationships():
-            if request is not None and name in self._nested_relationships:
-                # if we're serving JSON and nesting this field, then
-                # don't replace it with its id
-                continue
-            if include_meta:
-                loc = data['_source']
-            else:
-                loc = data
-            if name in loc:
-                inst = getattr(self, name)
-                field_obj = self._doc_type.mapping[name]
-                pk_field = field_obj._doc_class.pk_field()
-                if isinstance(inst, (list, AttrList)):
-                    loc[name] = [getattr(i, pk_field, None) for i in inst]
-                else:
-                    loc[name] = getattr(inst, pk_field, None)
         return data
 
     @classmethod
@@ -201,8 +365,7 @@ class BaseDocument(DocType):
     def _relationships(cls):
         return [
             name for name in cls._doc_type.mapping
-            if isinstance(cls._doc_type.mapping[name], ReferenceField)
-            ]
+            if isinstance(cls._doc_type.mapping[name], ReferenceField)]
 
     @classmethod
     def pk_field(cls):
@@ -219,7 +382,7 @@ class BaseDocument(DocType):
         return cls._doc_type.mapping[pk_field].__class__
 
     @classmethod
-    def get_item(cls, _raise_on_empty=True, **kw):
+    def get_item(cls, **kw):
         """ Get single item and raise exception if not found.
 
         Exception raising when item is not found can be disabled
@@ -227,37 +390,27 @@ class BaseDocument(DocType):
 
         :returns: Single collection item as an instance of ``cls``.
         """
-        # see if the item is cached
-        pk_field = cls.pk_field()
-        if list(kw.keys()) == [pk_field]:
-            id = kw[pk_field]
-            if id in cls._cache:
-                return cls._cache[id]
-
-        result = cls.get_collection(
-            _limit=1, _item_request=True,
-            **kw
-            )
-        if not result:
-            if _raise_on_empty:
-                msg = "'%s(%s)' resource not found" % (cls.__name__, kw)
-                raise JHTTPNotFound(msg)
-            return None
+        kw.setdefault('_raise_on_empty', True)
+        result = cls.get_collection(_limit=1, _item_request=True, **kw)
         return result[0]
 
     @classmethod
     def _update_many(cls, items, params, request=None):
-        cls._save_relationships(params)
         params = cls._flatten_relationships(params)
         if not items:
             return
 
         actions = [item.to_dict(include_meta=True) for item in items]
+        actions_count = len(actions)
         for action in actions:
             action.pop('_source')
             action['doc'] = params
         client = items[0].connection
-        return _bulk(actions, client, op_type='update', request=request)
+        operation = partial(
+            _bulk,
+            client=client, op_type='update', request=request)
+        _perform_in_chunks(actions, operation)
+        return actions_count
 
     @classmethod
     def _delete_many(cls, items, request=None):
@@ -265,14 +418,20 @@ class BaseDocument(DocType):
             return
 
         actions = [item.to_dict(include_meta=True) for item in items]
+        actions_count = len(actions)
         client = items[0].connection
-        return _bulk(actions, client, op_type='delete', request=request)
+        operation = partial(
+            _bulk,
+            client=client, op_type='delete', request=request)
+        _perform_in_chunks(actions, operation)
+        return actions_count
 
     @classmethod
     def get_collection(cls, _count=False, _strict=True, _sort=None,
                        _fields=None, _limit=None, _page=None, _start=None,
                        _query_set=None, _item_request=False, _explain=None,
-                       _search_fields=None, q=None, **params):
+                       _search_fields=None, q=None, _raise_on_empty=False,
+                       **params):
         """ Query collection and return results.
 
         Notes:
@@ -326,8 +485,7 @@ class BaseDocument(DocType):
             with full-text search(q param) to limit fields which are
             searched.
 
-        :returns: Query results as ``elasticsearch_dsl.XXX`` instance.
-            May be sorted, offset, limited.
+        :returns: Query results. May be sorted, offset, limited.
         :returns: Dict of {'field_name': fieldval}, when ``_fields`` param
             is provided.
         :returns: Number of query results as an int when ``_count`` param
@@ -347,24 +505,6 @@ class BaseDocument(DocType):
             or ``sqlalchemy.exc.IntegrityError`` errors happen during DB
             query.
         """
-        # see if the items are cached
-        pk_field = cls.pk_field()
-        if (list(params.keys()) == [pk_field] and _count==False
-            and _strict==True and _sort==None and _fields==None
-            and _limit==None and _page==None and _start==None
-            and _query_set==None and _item_request==False and _explain==None
-            and _search_fields==None and q==None):
-            ids = params[pk_field]
-            if not isinstance(ids, (list, tuple)):
-                ids = [ids]
-            results = []
-            for id in ids:
-                if not id in cls._cache:
-                    break
-                results.append(cls._cache[id])
-            else:
-                return results
-
         search_obj = cls.search()
 
         if _limit is not None:
@@ -402,26 +542,164 @@ class BaseDocument(DocType):
             if _strict:
                 _validate_fields(
                     cls,
-                    [f[1:] if f.startswith('-') else f for f in sort_fields]
-                    )
+                    [f[1:] if f.startswith('-') else f for f in sort_fields])
             search_obj = search_obj.sort(*sort_fields)
 
         hits = search_obj.execute().hits
+        if not hits and _raise_on_empty:
+            msg = "'%s(%s)' resource not found" % (cls.__name__, params)
+            raise JHTTPNotFound(msg)
+
         hits._nefertari_meta = dict(
             total=hits.total,
             start=_start,
-            fields=_fields
-            )
+            fields=_fields)
         return hits
 
     @classmethod
-    def get_field_params(cls, field):
-        # XXX - seems to be used to provide field init kw args
-        return None
+    def get_by_ids(cls, ids, **params):
+        params[cls.pk_field()] = ids
+        return cls.get_collection(**params)
+
+    @classmethod
+    def get_field_params(cls, field_name):
+        if field_name in cls._doc_type.mapping:
+            field = cls._doc_type.mapping[field_name]
+            return getattr(field, '_init_kwargs', None)
 
     @classmethod
     def fields_to_query(cls):
         return set(cls._doc_type.mapping).union({'_id'})
+
+    @classmethod
+    def count(cls, query_set):
+        try:
+            return query_set.count()
+        except AttributeError:
+            return len(query_set)
+
+    @classmethod
+    def has_field(cls, field):
+        return field in cls._doc_type.mapping
+
+    @classmethod
+    def get_or_create(cls, **params):
+        defaults = params.pop('defaults', {})
+        items = cls.get_collection(_raise_on_empty=False, **params)
+        if not items:
+            defaults.update(params)
+            return cls(**defaults).save(), True
+        elif len(items) > 1:
+            raise JHTTPBadRequest('Bad or Insufficient Params')
+        else:
+            return items[0], False
+
+    @classmethod
+    def get_null_values(cls):
+        """ Get null values of :cls: fields. """
+        skip_fields = {'_acl'}
+        null_values = {}
+        for name in cls._doc_type.mapping:
+            if name in skip_fields:
+                continue
+            field = cls._doc_type.mapping[name]
+            null_values[name] = field.empty()
+        null_values.pop('id', None)
+        return null_values
+
+    def update_iterables(self, params, attr, unique=False,
+                         value_type=None, save=True,
+                         request=None):
+        field = self._doc_type.mapping[attr]
+        is_dict = isinstance(field, DictField)
+        is_list = isinstance(field, ListField)
+
+        def split_keys(keys):
+            neg_keys = []
+            pos_keys = []
+
+            for key in keys:
+                if key.startswith('__'):
+                    continue
+                if key.startswith('-'):
+                    neg_keys.append(key[1:])
+                else:
+                    pos_keys.append(key.strip())
+            return pos_keys, neg_keys
+
+        def update_dict(update_params):
+            final_value = getattr(self, attr, {}) or {}
+            if isinstance(final_value, (InnerObjectWrapper, AttrDict)):
+                final_value = final_value.to_dict()
+            else:
+                final_value = final_value.copy()
+            if isinstance(update_params, (InnerObjectWrapper, AttrDict)):
+                update_params = update_params.to_dict()
+
+            if update_params in (None, '', {}):
+                if not final_value:
+                    return
+                update_params = {
+                    '-' + key: val for key, val in final_value.items()}
+            positive, negative = split_keys(list(update_params.keys()))
+
+            # Pop negative keys
+            for key in negative:
+                final_value.pop(key, None)
+
+            # Set positive keys
+            for key in positive:
+                final_value[str(key)] = update_params[key]
+
+            setattr(self, attr, final_value)
+            if save:
+                self.save(request)
+
+        def update_list(update_params):
+            final_value = getattr(self, attr, []) or []
+            final_value = list(final_value)
+            final_value = copy.deepcopy(final_value)
+            if update_params in (None, '', []):
+                if not final_value:
+                    return
+                update_params = ['-' + val for val in final_value]
+            if isinstance(update_params, dict):
+                keys = list(update_params.keys())
+            else:
+                keys = update_params
+
+            positive, negative = split_keys(keys)
+
+            if not (positive + negative):
+                raise JHTTPBadRequest('Missing params')
+
+            if positive:
+                if unique:
+                    positive = [v for v in positive if v not in final_value]
+                final_value += positive
+
+            if negative:
+                final_value = list(set(final_value) - set(negative))
+
+            setattr(self, attr, final_value)
+            if save:
+                self.save(request)
+
+        if is_dict:
+            update_dict(params)
+
+        elif is_list:
+            update_list(params)
+
+    def _is_modified(self):
+        """ Determine if instance is modified.
+
+        TODO: Rework to make the check more sane.
+        """
+        return not self._is_created()
+
+    def _is_created(self):
+        return self._created
 
 
 def _cleaned_query_params(cls, params, strict):
@@ -432,7 +710,7 @@ def _cleaned_query_params(cls, params, strict):
 
     # XXX support field__bool and field__in/field__all queries?
     # process_lists(params)
-    # process_bools(params)
+    process_bools(params)
 
     if strict:
         _validate_fields(cls, params.keys())
@@ -469,7 +747,27 @@ def _validate_fields(cls, field_names):
             cls.__name__, ', '.join(invalid_names)))
 
 
+def _perform_in_chunks(actions, operation, chunk_size=None):
+    if chunk_size is None:
+        from nefertari_es import Settings
+        chunk_size = Settings.asint('chunk_size', 500)
+
+    start = end = 0
+    count = len(actions)
+
+    while count:
+        if count < chunk_size:
+            chunk_size = count
+        end += chunk_size
+
+        operation(actions=actions[start:end])
+
+        start += chunk_size
+        count -= chunk_size
+
+
 def _bulk(actions, client, op_type='index', request=None):
+    from nefertari_es import Settings
     for action in actions:
         action['_op_type'] = op_type
 
@@ -483,8 +781,7 @@ def _bulk(actions, client, op_type='index', request=None):
     else:
         query_params = request.params.mixed()
     query_params = dictset(query_params)
-    # TODO: Use "elasticsearch.enable_refresh_query" setting here
-    refresh_enabled = False
+    refresh_enabled = Settings.asbool('enable_refresh_query', False)
     if '_refresh_index' in query_params and refresh_enabled:
         kwargs['refresh'] = query_params.asbool('_refresh_index')
 
@@ -493,3 +790,12 @@ def _bulk(actions, client, op_type='index', request=None):
         raise Exception('Errors happened when executing Elasticsearch '
                         'actions: {}'.format('; '.join(errors)))
     return executed_num
+
+
+def process_bools(_dict):
+    for k in _dict:
+        new_k, _, _t = k.partition('__')
+        if _t == 'bool':
+            _dict[new_k] = _dict.pop_bool_param(k)
+
+    return _dict

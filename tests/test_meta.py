@@ -1,7 +1,7 @@
 import pytest
 from mock import patch, call
 
-from nefertari_es import meta
+from nefertari_es import meta, documents, fields
 
 
 class TestMetaHelpers(object):
@@ -43,9 +43,70 @@ class TestDocumentRegistry(object):
 
     def test_registereddocumentmeta(self):
         from six import add_metaclass
+        from elasticsearch_dsl.document import DocTypeMeta
 
-        @add_metaclass(meta.RegisteredDocMeta)
+        class MyMeta(meta.RegisteredDocMixin, DocTypeMeta):
+            pass
+
+        @add_metaclass(MyMeta)
         class MyItem123(object):
             pass
 
         assert meta._document_registry['MyItem123'] is MyItem123
+
+
+class TestNonDocumentInheritanceMixin(object):
+
+    def test_fields_added_to_mapping(self):
+        class Mixin(object):
+            username = fields.StringField(primary_key=True)
+
+        class User(Mixin, documents.BaseDocument):
+            password = fields.StringField()
+
+        assert 'username' in User._doc_type.mapping
+        assert isinstance(
+            User._doc_type.mapping['username'],
+            fields.StringField)
+        assert 'password' in User._doc_type.mapping
+        assert isinstance(
+            User._doc_type.mapping['password'],
+            fields.StringField)
+        assert User.pk_field() == 'username'
+
+        user = User(username='foo', password='bar')
+        assert user.username == 'foo'
+        assert user.password == 'bar'
+
+
+class TestGenerateMetaMixin(object):
+
+    def test_meta_generation(self):
+        class FooBar(documents.BaseDocument):
+            username = fields.StringField(primary_key=True)
+
+        assert FooBar._doc_type.name == 'FooBar'
+
+
+class TestBackrefGeneratingDocMeta(object):
+
+    def test_backref_generation(self):
+        class Tag(documents.BaseDocument):
+            name = fields.StringField(primary_key=True)
+
+        with pytest.raises(KeyError):
+            Tag._doc_type.mapping['stories']
+
+        class Story(documents.BaseDocument):
+            name = fields.StringField(primary_key=True)
+            tags = fields.Relationship(
+                document='Tag', uselist=True,
+                backref_name='stories')
+
+        tag_stories = Tag._doc_type.mapping['stories']
+        assert isinstance(tag_stories, fields.ReferenceField)
+        assert tag_stories._back_populates == 'tags'
+        assert tag_stories._doc_class is Story
+
+        story_tags = Story._doc_type.mapping['tags']
+        assert story_tags._back_populates == 'stories'
