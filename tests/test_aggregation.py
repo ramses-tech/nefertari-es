@@ -3,10 +3,11 @@ from mock import Mock, patch
 from nefertari.utils import dictset
 from nefertari.json_httpexceptions import JHTTPForbidden
 
-from nefertari_es.aggregations import ESAggregator
+from nefertari_es.aggregation import Aggregator, setup_aggregation
+from nefertari_es import documents
 
 
-class TestESAggregator(object):
+class TestAggregator(object):
 
     class DemoView(object):
         _aggregations_keys = ('test_aggregations',)
@@ -16,7 +17,7 @@ class TestESAggregator(object):
     def test_pop_aggregations_params_query_string(self):
         view = self.DemoView()
         view._query_params = {'test_aggregations.foo': 1, 'bar': 2}
-        aggregator = ESAggregator(view)
+        aggregator = Aggregator(view)
         params = aggregator.pop_aggregations_params()
         assert params == {'foo': 1}
         assert aggregator._query_params == {'bar': 2}
@@ -27,7 +28,7 @@ class TestESAggregator(object):
             'test_aggregations.foo': 1,
             'foobar': 2,
         }
-        aggregator = ESAggregator(view)
+        aggregator = Aggregator(view)
         aggregator._aggregations_keys = ('test_aggregations', 'foobar')
         params = aggregator.pop_aggregations_params()
         assert params == {'foo': 1}
@@ -35,7 +36,7 @@ class TestESAggregator(object):
 
     def test_pop_aggregations_params_mey_error(self):
         view = self.DemoView()
-        aggregator = ESAggregator(view)
+        aggregator = Aggregator(view)
         with pytest.raises(KeyError) as ex:
             aggregator.pop_aggregations_params()
         assert 'Missing aggregation params' in str(ex.value)
@@ -43,16 +44,19 @@ class TestESAggregator(object):
     def test_stub_wrappers(self):
         view = self.DemoView()
         view._after_calls = {'index': [1, 2, 3], 'show': [1, 2]}
-        aggregator = ESAggregator(view)
+        aggregator = Aggregator(view)
         aggregator.stub_wrappers()
         assert aggregator.view._after_calls == {'show': [1, 2], 'index': []}
 
     @patch('nefertari.elasticsearch.ES')
     def test_aggregate(self, mock_es):
+        class Foo(documents.BaseDocument):
+            pass
+        Foo.aggregate = Mock()
         view = self.DemoView()
         view._auth_enabled = True
-        view.Model = Mock(__name__='FooBar')
-        aggregator = ESAggregator(view)
+        view.Model = Foo
+        aggregator = Aggregator(view)
         aggregator.check_aggregations_privacy = Mock()
         aggregator.stub_wrappers = Mock()
         aggregator.pop_aggregations_params = Mock(return_value={'foo': 1})
@@ -62,10 +66,8 @@ class TestESAggregator(object):
         aggregator.pop_aggregations_params.assert_called_once_with()
         aggregator.check_aggregations_privacy.assert_called_once_with(
             {'foo': 1})
-        mock_es.assert_called_once_with('FooBar')
-        mock_es().aggregate.assert_called_once_with(
-            _aggregations_params={'foo': 1},
-            q='2', zoo=3)
+        Foo.aggregate.assert_called_once_with(
+            _aggs_params={'foo': 1}, q='2', zoo=3)
 
     def test_get_aggregations_fields(self):
         params = {
@@ -77,7 +79,7 @@ class TestESAggregator(object):
                 }
             }
         }
-        result = sorted(ESAggregator.get_aggregations_fields(params))
+        result = sorted(Aggregator.get_aggregations_fields(params))
         assert result == sorted(['foo', 'bar', 'baz'])
 
     @patch('nefertari.wrappers.apply_privacy')
@@ -85,7 +87,7 @@ class TestESAggregator(object):
         view = self.DemoView()
         view.request = 1
         view.Model = Mock(__name__='Zoo')
-        aggregator = ESAggregator(view)
+        aggregator = Aggregator(view)
         aggregator.get_aggregations_fields = Mock(return_value=['foo', 'bar'])
         wrapper = Mock()
         mock_privacy.return_value = wrapper
@@ -104,7 +106,7 @@ class TestESAggregator(object):
         view = self.DemoView()
         view.request = 1
         view.Model = Mock(__name__='Zoo')
-        aggregator = ESAggregator(view)
+        aggregator = Aggregator(view)
         aggregator.get_aggregations_fields = Mock(return_value=['foo', 'bar'])
         wrapper = Mock()
         mock_privacy.return_value = wrapper
@@ -121,17 +123,42 @@ class TestESAggregator(object):
     def view_aggregations_keys_used(self):
         view = self.DemoView()
         view._aggregations_keys = ('foo',)
-        assert ESAggregator(view)._aggregations_keys == ('foo',)
+        assert Aggregator(view)._aggregations_keys == ('foo',)
         view._aggregations_keys = None
-        assert ESAggregator(view)._aggregations_keys == (
+        assert Aggregator(view)._aggregations_keys == (
             '_aggregations', '_aggs')
 
     def test_wrap(self):
         view = self.DemoView()
         view.index = Mock(__name__='foo')
-        aggregator = ESAggregator(view)
+        aggregator = Aggregator(view)
         aggregator.aggregate = Mock(side_effect=KeyError)
         func = aggregator.wrap(view.index)
         func(1, 2)
         aggregator.aggregate.assert_called_once_with()
         view.index.assert_called_once_with(1, 2)
+
+
+@patch('nefertari_es.aggregation.Aggregator')
+@patch('nefertari_es.ESSettings')
+class TestSetupAggregation(object):
+
+    def test_aggs_disabled(self, mock_set, mock_aggtr):
+        mock_set.asbool.return_value = False
+        setup_aggregation(1)
+        mock_set.asbool.assert_called_once_with('enable_aggregations')
+        assert not mock_aggtr.called
+
+    def test_index_not_defined(self, mock_set, mock_aggtr):
+        mock_set.asbool.return_value = True
+        view = Mock(index=None)
+        setup_aggregation(view)
+        assert not mock_aggtr.called
+
+    def test_index_defined(self, mock_set, mock_aggtr):
+        mock_set.asbool.return_value = True
+        view = Mock(index=1)
+        setup_aggregation(view)
+        mock_aggtr.assert_called_once_with(view)
+        mock_aggtr().wrap.assert_called_once_with(1)
+        assert view.index == mock_aggtr().wrap()
