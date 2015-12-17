@@ -537,30 +537,16 @@ class BaseMixin(object):
             search_obj = search_obj.extra(from_=_start, size=limit)
 
         if _fields:
-            include, exclude = process_fields(_fields)
-            if _strict and not search_passed:
-                _validate_fields(cls, include + exclude)
-            # XXX partial fields support isn't yet released. for now
-            # we just use fields, later we'll add support for excluded fields
-            search_obj = search_obj.fields(include)
+            search_obj = cls._apply_search_fields(
+                search_obj, _fields, _strict, search_passed)
 
         if params:
-            params = {key: val for key, val in params.items()
-                      if not key.startswith('__') and val != '_all'}
-            # process_lists(params)
-            process_bools(params)
-            if not search_passed:
-                params = _clean_query_params(cls, params, _strict)
-                params = _rename_pk_param(cls, params)
-            params = _restructure_params(params)
-            if params:
-                search_obj = search_obj.filter('terms', **params)
+            search_obj = cls._apply_search_params(
+                search_obj, _strict, search_passed, **params)
 
         if q is not None:
-            query_kw = {'query': q}
-            if _search_fields is not None:
-                query_kw['fields'] = _search_fields.split(',')
-            search_obj = search_obj.query('query_string', **query_kw)
+            search_obj = cls._apply_search_query(
+                search_obj, q, _search_fields)
 
         if _count:
             return search_obj.count()
@@ -588,35 +574,73 @@ class BaseMixin(object):
         return hits
 
     @classmethod
-    def aggregate(cls, _aggs_params, _search_type='count', search_obj=None):
+    def _apply_search_fields(cls, search_obj, _fields, _strict,
+                             search_passed):
+        include, exclude = process_fields(_fields)
+        if _strict and not search_passed:
+            _validate_fields(cls, include + exclude)
+        # XXX partial fields support isn't yet released. for now
+        # we just use fields, later we'll add support for excluded fields
+        return search_obj.fields(include)
+
+    @classmethod
+    def _apply_search_query(cls, search_obj, q, _search_fields):
+        query_kw = {'query': q}
+        if _search_fields is not None:
+            query_kw['fields'] = split_strip(_search_fields)
+        return search_obj.query('query_string', **query_kw)
+
+    @classmethod
+    def _apply_search_params(cls, search_obj, _strict, search_passed,
+                             **params):
+        params = {key: val for key, val in params.items()
+                  if not key.startswith('__') and val != '_all'}
+        # process_lists(params)
+        process_bools(params)
+        if not search_passed:
+            params = _clean_query_params(cls, params, _strict)
+            params = _rename_pk_param(cls, params)
+        params = _restructure_params(params)
+        if params:
+            search_obj = search_obj.filter('terms', **params)
+        return search_obj
+
+    @classmethod
+    def aggregate(cls, _aggs_params, _strict=False, _fields=None,
+                  q=None, _search_fields=None, search_obj=None,
+                  _search_type='count', **params):
         """ Perform aggreration
 
         Arguments:
             :_aggs_params: Dict of aggregation params. Root key is an
                 aggregation name. Required.
-            :_raise_on_empty: Boolean indicating whether to raise exception
-                when IndexNotFoundException exception happens. Optional,
-                defaults to False.
             :_search_type: Type of search to use. Optional, defaults to
                 'count'. You might want to provide this argument explicitly
                 when performing nested aggregations on buckets.
         """
+        search_passed = search_obj is not None
         if search_obj is None:
             search_obj = cls.search()
 
         # Set limit so ES won't complain. It is ignored in the end
-        search_params = {}
-        search_params['search_type'] = _search_type
-        search_params['body']['aggregations'] = _aggs_params
+        search_obj.update_from_dict({
+            'search_type': _search_type,
+            'aggregations': _aggs_params,
+        })
 
-        response = cls.api.search(**search_params)
+        if _fields:
+            search_obj = cls._apply_search_fields(
+                search_obj, _fields, _strict, search_passed)
 
-        try:
-            return response['aggregations']
-        except KeyError:
-            raise JHTTPNotFound('No aggregations returned from ES')
+        if params:
+            search_obj = cls._apply_search_params(
+                search_obj, _strict, search_passed, **params)
 
+        if q is not None:
+            search_obj = cls._apply_search_query(
+                search_obj, q, _search_fields)
 
+        return search_obj.execute().hits
 
     @classmethod
     def get_by_ids(cls, ids, **params):

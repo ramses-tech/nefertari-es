@@ -3,6 +3,8 @@ from nefertari import wrappers
 from nefertari.utils import dictset, validate_data_privacy
 from nefertari.json_httpexceptions import JHTTPForbidden
 
+from nefertari_es.documents import BaseDocument, JHTTPBadRequest
+
 
 def setup_aggregation(view, aggregator=None):
     """ Wrap `view.index` method with `aggregator`.
@@ -119,12 +121,18 @@ class Aggregator(object):
 
     def aggregate(self):
         """ Perform aggregation and return response. """
-        from nefertari.elasticsearch import ES
         aggregations_params = self.pop_aggregations_params()
         if self.view._auth_enabled:
             self.check_aggregations_privacy(aggregations_params)
         self.stub_wrappers()
 
-        return ES(self.view.Model.__name__).aggregate(
-            _aggregations_params=aggregations_params,
+        if issubclass(self.view.Model, BaseDocument):
+            es_model = self.view.Model
+        elif issubclass(self.view.Model._secondary, BaseDocument):
+            es_model = self.view.Model._secondary
+        else:
+            raise JHTTPBadRequest('No ES-based model defined')
+
+        return es_model.aggregate(
+            _aggs_params=aggregations_params,
             **self._query_params)
