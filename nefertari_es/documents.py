@@ -623,10 +623,8 @@ class BaseMixin(object):
             search_obj = cls.search()
 
         # Set limit so ES won't complain. It is ignored in the end
-        search_obj.update_from_dict({
-            'search_type': _search_type,
-            'aggregations': _aggs_params,
-        })
+        search_obj.update_from_dict({'aggregations': _aggs_params})
+        search_obj = search_obj.params(search_type=_search_type)
 
         if _fields:
             search_obj = cls._apply_search_fields(
@@ -640,7 +638,8 @@ class BaseMixin(object):
             search_obj = cls._apply_search_query(
                 search_obj, q, _search_fields)
 
-        return search_obj.execute().hits
+        response = search_obj.execute()
+        return response.aggregations
 
     @classmethod
     def get_by_ids(cls, ids, **params):

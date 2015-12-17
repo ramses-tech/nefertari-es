@@ -1,9 +1,13 @@
+import logging
+
 import six
 from nefertari import wrappers
 from nefertari.utils import dictset, validate_data_privacy
 from nefertari.json_httpexceptions import JHTTPForbidden
 
 from nefertari_es.documents import BaseDocument, JHTTPBadRequest
+
+log = logging.getLogger(__name__)
 
 
 def setup_aggregation(view, aggregator=None):
@@ -17,6 +21,7 @@ def setup_aggregation(view, aggregator=None):
     if aggregator is None:
         aggregator = Aggregator
     if not ESSettings.asbool('enable_aggregations'):
+        log.warning('Aggregations are not enabled')
         return
 
     index = getattr(view, 'index', None)
@@ -62,7 +67,8 @@ class Aggregator(object):
         def wrapper(*args, **kwargs):
             try:
                 return self.aggregate()
-            except KeyError:
+            except KeyError as ex:
+                log.warning('Failed to aggregate: {}'.format(ex))
                 return func(*args, **kwargs)
         return wrapper
 
