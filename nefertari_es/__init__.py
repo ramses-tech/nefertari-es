@@ -94,7 +94,7 @@ def includeme(config):
     ESSettings.update(Settings.mget('elasticsearch'))
 
 
-def setup_database(config):
+def setup_database(config, setup_polymorphic=True):
     params = {}
     params['chunk_size'] = ESSettings.get('chunk_size', 500)
     params['hosts'] = []
@@ -112,8 +112,9 @@ def setup_database(config):
         **params)
     setup_index(conn)
 
-    if ESSettings.asbool('enable_polymorphic_query'):
-        config.include('nefertari_es.polymorphic')
+    if setup_polymorphic:
+        if ESSettings.asbool('enable_polymorphic_query'):
+            config.include('nefertari_es.polymorphic')
 
 
 def setup_index(conn):

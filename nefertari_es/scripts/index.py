@@ -44,7 +44,7 @@ class IndexCommand(object):
             required=True)
         parser.add_argument(
             '--params', help='Url-encoded params for each model')
-        parser.add_argument('--index', help='Index name', default=None)
+
         parser.add_argument(
             '--chunk',
             help=('Index chunk size. If chunk size not provided '
@@ -57,6 +57,7 @@ class IndexCommand(object):
                   'index are indexed.'),
             action='store_true',
             default=False)
+
         self._prepare_env(parser, logger)
 
     def _prepare_env(self, parser, logger):
