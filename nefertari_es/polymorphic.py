@@ -26,9 +26,11 @@ from pyramid.security import DENY_ALL, Allow, ALL_PERMISSIONS
 
 from nefertari.view import BaseView
 from nefertari.acl import CollectionACL
+from nefertari.json_httpexceptions import JHTTPBadRequest
 from elasticsearch_dsl import Search
 
 from nefertari_es.documents import BaseDocument
+from nefertari_es.aggregation import Aggregator
 
 
 def includeme(config):
@@ -137,9 +139,17 @@ class PolymorphicView(PolymorphicHelperMixin, BaseView):
     setup that serves instances of this model. Models that only have
     singular views setup are not served by polymorhic view.
     """
+    def __init__(self, *args, **kwargs):
+        super(PolymorphicView, self).__init__(*args, **kwargs)
+        self.es_models = self.get_es_models()
+
     def _run_init_actions(self):
         self.setup_default_wrappers()
         self.set_public_limits()
+
+    def _setup_aggregation(self, *args, **kwargs):
+        kwargs['aggregator'] = PolymorphicAggregator
+        super(PolymorphicView, self)._setup_aggregation(*args, **kwargs)
 
     def get_es_models(self):
         """ Determine ES models from request data.
@@ -164,7 +174,26 @@ class PolymorphicView(PolymorphicHelperMixin, BaseView):
     def index(self, collections):
         """ Handle collection GET request. """
         self._query_params.process_int_param('_limit', 20)
-        models = self.get_es_models()
         return BaseDocument.get_collection(
-            search_obj=Search(doc_type=models),
+            search_obj=Search(doc_type=self.es_models),
+            **self._query_params)
+
+
+class PolymorphicAggregator(Aggregator):
+    def aggregate(self):
+        """ Perform aggregation and return response. """
+        es_models = self.view.es_models
+        if not es_models:
+            raise JHTTPBadRequest('No ES-based model defined')
+
+        aggregations_params = self.pop_aggregations_params()
+        if self.view._auth_enabled:
+            for model in es_models:
+                self.check_aggregations_privacy(
+                    aggregations_params, model)
+        self.stub_wrappers()
+
+        return BaseDocument.aggregate(
+            _aggs_params=aggregations_params,
+            search_obj=Search(doc_type=es_models),
             **self._query_params)

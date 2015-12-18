@@ -618,6 +618,7 @@ class BaseMixin(object):
                 'count'. You might want to provide this argument explicitly
                 when performing nested aggregations on buckets.
         """
+        params.pop('_limit', None)
         search_passed = search_obj is not None
         if search_obj is None:
             search_obj = cls.search()
@@ -625,7 +626,6 @@ class BaseMixin(object):
         # Set limit so ES won't complain. It is ignored in the end
         search_obj.update_from_dict({'aggregations': _aggs_params})
         search_obj = search_obj.params(search_type=_search_type)
-
         if _fields:
             search_obj = cls._apply_search_fields(
                 search_obj, _fields, _strict, search_passed)

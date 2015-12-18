@@ -1,5 +1,6 @@
 from mock import Mock, patch
 from nefertari.renderers import _JSONEncoder
+from nefertari.utils import dictset
 
 from nefertari_es import polymorphic, documents
 
@@ -149,3 +150,37 @@ class TestPolymorphicView(object):
             search_obj=mock_search(),
             _limit=20, foo1='bar1')
         assert response == mock_doc.get_collection()
+
+
+class TestPolymorphicAggregator(object):
+
+    class DemoView(object):
+        _aggregations_keys = ('test_aggregations',)
+        _query_params = dictset()
+        _json_params = dictset()
+
+    @patch('nefertari_es.polymorphic.Search')
+    @patch('nefertari_es.polymorphic.BaseDocument')
+    def test_aggregate(self, mock_doc, mock_search):
+        class Foo(documents.BaseDocument):
+            pass
+        Foo.aggregate = Mock()
+        view = self.DemoView()
+        view._auth_enabled = True
+        view.Model = Foo
+        view.es_models = [Foo]
+        aggregator = polymorphic.PolymorphicAggregator(view)
+        aggregator.check_aggregations_privacy = Mock()
+        aggregator.stub_wrappers = Mock()
+        aggregator.pop_aggregations_params = Mock(return_value={'foo': 1})
+        aggregator._query_params = {'q': '2', 'zoo': 3}
+        aggregator.aggregate()
+        aggregator.stub_wrappers.assert_called_once_with()
+        aggregator.pop_aggregations_params.assert_called_once_with()
+        aggregator.check_aggregations_privacy.assert_called_once_with(
+            {'foo': 1}, view.Model)
+        mock_search.assert_called_once_with(doc_type=[Foo])
+        mock_doc.aggregate.assert_called_once_with(
+            _aggs_params={'foo': 1},
+            search_obj=mock_search(),
+            q='2', zoo=3)

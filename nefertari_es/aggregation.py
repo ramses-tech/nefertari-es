@@ -3,9 +3,9 @@ import logging
 import six
 from nefertari import wrappers
 from nefertari.utils import dictset, validate_data_privacy
-from nefertari.json_httpexceptions import JHTTPForbidden
+from nefertari.json_httpexceptions import JHTTPForbidden, JHTTPBadRequest
 
-from nefertari_es.documents import BaseDocument, JHTTPBadRequest
+from nefertari_es.documents import BaseDocument
 
 log = logging.getLogger(__name__)
 
@@ -108,15 +108,17 @@ class Aggregator(object):
                 fields.append(val)
         return fields
 
-    def check_aggregations_privacy(self, aggregations_params):
+    def check_aggregations_privacy(self, aggregations_params, model):
         """ Check per-field privacy rules in aggregations.
 
         Privacy is checked by making sure user has access to the fields
-        used in aggregations.
+        used in aggregations. Fields that don't belong to model are
+        not tested for privacy.
         """
         fields = self.get_aggregations_fields(aggregations_params)
+        fields = [f for f in fields if f in model.fields_to_query()]
         fields_dict = dictset.fromkeys(fields)
-        fields_dict['_type'] = self.view.Model.__name__
+        fields_dict['_type'] = model.__name__
 
         try:
             validate_data_privacy(self.view.request, fields_dict)
@@ -129,7 +131,8 @@ class Aggregator(object):
         """ Perform aggregation and return response. """
         aggregations_params = self.pop_aggregations_params()
         if self.view._auth_enabled:
-            self.check_aggregations_privacy(aggregations_params)
+            self.check_aggregations_privacy(
+                aggregations_params, self.view.Model)
         self.stub_wrappers()
 
         if issubclass(self.view.Model, BaseDocument):

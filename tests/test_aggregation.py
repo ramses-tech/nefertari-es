@@ -48,8 +48,7 @@ class TestAggregator(object):
         aggregator.stub_wrappers()
         assert aggregator.view._after_calls == {'show': [1, 2], 'index': []}
 
-    @patch('nefertari.elasticsearch.ES')
-    def test_aggregate(self, mock_es):
+    def test_aggregate(self):
         class Foo(documents.BaseDocument):
             pass
         Foo.aggregate = Mock()
@@ -65,7 +64,7 @@ class TestAggregator(object):
         aggregator.stub_wrappers.assert_called_once_with()
         aggregator.pop_aggregations_params.assert_called_once_with()
         aggregator.check_aggregations_privacy.assert_called_once_with(
-            {'foo': 1})
+            {'foo': 1}, view.Model)
         Foo.aggregate.assert_called_once_with(
             _aggs_params={'foo': 1}, q='2', zoo=3)
 
@@ -87,13 +86,14 @@ class TestAggregator(object):
         view = self.DemoView()
         view.request = 1
         view.Model = Mock(__name__='Zoo')
+        view.Model.fields_to_query.return_value = ['foo', 'bar']
         aggregator = Aggregator(view)
         aggregator.get_aggregations_fields = Mock(return_value=['foo', 'bar'])
         wrapper = Mock()
         mock_privacy.return_value = wrapper
         wrapper.return_value = {'foo': None, 'bar': None}
         try:
-            aggregator.check_aggregations_privacy({'zoo': 2})
+            aggregator.check_aggregations_privacy({'zoo': 2}, view.Model)
         except JHTTPForbidden:
             raise Exception('Unexpected error')
         aggregator.get_aggregations_fields.assert_called_once_with({'zoo': 2})
@@ -106,19 +106,37 @@ class TestAggregator(object):
         view = self.DemoView()
         view.request = 1
         view.Model = Mock(__name__='Zoo')
+        view.Model.fields_to_query.return_value = ['foo', 'bar']
         aggregator = Aggregator(view)
         aggregator.get_aggregations_fields = Mock(return_value=['foo', 'bar'])
         wrapper = Mock()
         mock_privacy.return_value = wrapper
         wrapper.return_value = {'bar': None}
         with pytest.raises(JHTTPForbidden) as ex:
-            aggregator.check_aggregations_privacy({'zoo': 2})
+            aggregator.check_aggregations_privacy({'zoo': 2}, view.Model)
         expected = 'Not enough permissions to aggregate on fields: foo'
         assert expected == str(ex.value)
         aggregator.get_aggregations_fields.assert_called_once_with({'zoo': 2})
         mock_privacy.assert_called_once_with(1)
         wrapper.assert_called_once_with(
             result={'_type': 'Zoo', 'foo': None, 'bar': None})
+
+    @patch('nefertari_es.aggregation.validate_data_privacy')
+    def test_check_aggregations_privacy_only_model_fields_passed(
+            self, mock_validate):
+        view = self.DemoView()
+        view.request = 1
+        view.Model = Mock(__name__='Zoo')
+        view.Model.fields_to_query.return_value = ['foo']
+        aggregator = Aggregator(view)
+        aggregator.get_aggregations_fields = Mock(return_value=['foo', 'bar'])
+        try:
+            aggregator.check_aggregations_privacy(
+                {'foo': 2, 'bar': 3}, view.Model)
+        except:
+            pass
+        mock_validate.assert_called_once_with(
+            1, {'foo': None, '_type': 'Zoo'})
 
     def view_aggregations_keys_used(self):
         view = self.DemoView()
