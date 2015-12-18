@@ -11,27 +11,26 @@ from nefertari.elasticsearch import ES
 from nefertari import engine
 
 
-def main(argv=sys.argv, quiet=False):
-    log = logging.getLogger()
-    log.setLevel(logging.WARNING)
+def main(argv=sys.argv):
+    logger = logging.getLogger()
+    logger.setLevel(logging.WARNING)
     ch = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
     ch.setFormatter(formatter)
-    log.addHandler(ch)
+    logger.addHandler(ch)
 
-    command = ESCommand(argv, log)
+    command = IndexCommand(argv, logger)
     return command.run()
 
 
-class ESCommand(object):
+class IndexCommand(object):
 
     bootstrap = (bootstrap,)
     stdout = sys.stdout
     usage = '%prog config_uri <models'
 
-    def __init__(self, argv, log):
+    def __init__(self, argv, logger):
         parser = ArgumentParser(description=__doc__)
-
         parser.add_argument(
             '-c', '--config', help='config.ini (required)',
             required=True)
@@ -58,62 +57,66 @@ class ESCommand(object):
                   'index are indexed.'),
             action='store_true',
             default=False)
+        self._prepare_env(parser, logger)
 
+    def _prepare_env(self, parser, logger):
         self.options = parser.parse_args()
         if not self.options.config:
             return parser.print_help()
 
-        # Prevent ES.setup_mappings running on bootstrap;
-        # Restore ES._mappings_setup after bootstrap is over
-        mappings_setup = getattr(ES, '_mappings_setup', False)
-        try:
-            ES._mappings_setup = True
-            env = self.bootstrap[0](self.options.config)
-        finally:
-            ES._mappings_setup = mappings_setup
-
+        env = self.bootstrap[0](self.options.config)
         registry = env['registry']
-        # Include 'nefertari.engine' to setup specific engine
+        # Include 'nefertari.engine' to setup engines
         config = Configurator(settings=registry.settings)
         config.include('nefertari.engine')
 
-        self.log = log
-
+        self.logger = logger
         if not self.options.quiet:
-            self.log.setLevel(logging.INFO)
+            self.logger.setLevel(logging.INFO)
 
         self.settings = dictset(registry.settings)
 
+    def _nefertari_es_secondary(self):
+        import nefertari_es
+        from nefertari import engine
+        return engine.secondary is nefertari_es
+
     def run(self):
-        ES.setup(self.settings)
+        if not self._nefertari_es_secondary():
+            self.logger.warning(
+                'Nothing to index: nefertari_es is not a secondary '
+                'engine')
+            return
+
         model_names = split_strip(self.options.models)
-
         for model_name in model_names:
-            self.log.info('Processing model `{}`'.format(model_name))
-            model = engine.get_document_cls(model_name)
+            self._index_model(model_name)
 
-            params = self.options.params or ''
-            params = dict([
-                [k, v[0]] for k, v in urllib.parse.parse_qs(params).items()
-            ])
-            params.setdefault('_limit', params.get('_limit', 10000))
-            chunk_size = self.options.chunk or params['_limit']
+    def _index_model(self, model_name):
+        self.logger.info('Processing model `{}`'.format(model_name))
+        model = engine.get_document_cls(model_name)
 
-            es = ES(source=model_name, index_name=self.options.index,
-                    chunk_size=chunk_size)
-            query_set = model.get_collection(**params)
-            documents = to_dicts(query_set)
+        params = self.options.params or ''
+        params = dict([
+            [k, v[0]] for k, v in urllib.parse.parse_qs(params).items()
+        ])
+        params.setdefault('_limit', params.get('_limit', 10000))
+        chunk_size = self.options.chunk or params['_limit']
 
-            if self.options.force:
-                self.log.info('Recreating `{}` ES mapping'.format(model_name))
-                es.delete_mapping()
-                es.put_mapping(body=model.get_es_mapping())
-                self.log.info('Indexing all `{}` documents'.format(
-                    model_name))
-                es.index(documents)
-            else:
-                self.log.info('Indexing missing `{}` documents'.format(
-                    model_name))
-                es.index_missing_documents(documents)
+        es = ES(source=model_name, index_name=self.options.index,
+                chunk_size=chunk_size)
+        query_set = model.get_collection(**params)
+        documents = to_dicts(query_set)
 
-        return 0
+        if self.options.force:
+            self.logger.info('Recreating `{}` ES mapping'.format(
+                model_name))
+            es.delete_mapping()
+            es.put_mapping(body=model.get_es_mapping())
+            self.logger.info('Indexing all `{}` documents'.format(
+                model_name))
+            es.index(documents)
+        else:
+            self.logger.info('Indexing missing `{}` documents'.format(
+                model_name))
+            es.index_missing_documents(documents)

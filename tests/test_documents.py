@@ -590,7 +590,7 @@ class TestHelpers(object):
             actions=[{'id': 1, '_op_type': 'delete'}])
         assert result == 5
 
-    @patch('nefertari_es.Settings')
+    @patch('nefertari_es.ESSettings')
     @patch('nefertari_es.documents.helpers')
     def test_bulk_with_refresh(self, mock_helpers, mock_settings):
         mock_helpers.bulk.return_value = (5, None)

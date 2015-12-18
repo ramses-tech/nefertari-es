@@ -870,8 +870,8 @@ def _validate_fields(cls, field_names):
 
 def _perform_in_chunks(actions, operation, chunk_size=None):
     if chunk_size is None:
-        from nefertari_es import Settings
-        chunk_size = Settings.asint('chunk_size', 500)
+        from nefertari_es import ESSettings
+        chunk_size = ESSettings.asint('chunk_size', 500)
 
     start = end = 0
     count = len(actions)
@@ -888,7 +888,7 @@ def _perform_in_chunks(actions, operation, chunk_size=None):
 
 
 def _bulk(actions, client, op_type='index', request=None):
-    from nefertari_es import Settings
+    from nefertari_es import ESSettings
     for action in actions:
         action['_op_type'] = op_type
 
@@ -902,7 +902,7 @@ def _bulk(actions, client, op_type='index', request=None):
     else:
         query_params = request.params.mixed()
     query_params = dictset(query_params)
-    refresh_enabled = Settings.asbool('enable_refresh_query', False)
+    refresh_enabled = ESSettings.asbool('enable_refresh_query', False)
     if '_refresh_index' in query_params and refresh_enabled:
         kwargs['refresh'] = query_params.asbool('_refresh_index')
 
