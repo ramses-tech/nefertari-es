@@ -46,8 +46,8 @@ class IndexCommand(object):
             '--params', help='Url-encoded params for each model')
         parser.add_argument(
             '--force',
-            help=('Update ES mapping and reindex documents of provided '
-                  'models. By default, only documents that are missing from '
+            help=('Reindex all documents of provided models. '
+                  'By default, only documents that are missing from '
                   'index are indexed.'),
             action='store_true',
             default=False)
@@ -99,9 +99,6 @@ class IndexCommand(object):
             _query_secondary=False, **params)
 
         if self.options.force:
-            self.logger.info('Updating `{}` ES mapping'.format(
-                model_name))
-            es_model._doc_type.init()
             self.logger.info('Indexing all `{}` documents'.format(
                 model_name))
             db_items_data = to_dicts(db_queryset)
