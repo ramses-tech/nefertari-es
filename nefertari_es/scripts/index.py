@@ -103,20 +103,25 @@ class IndexCommand(object):
         params = dict([
             [k, v[0]] for k, v in urllib.parse.parse_qs(params).items()
         ])
-        query_set = model.get_collection(**params)
-        docs = to_dicts(query_set)
+        db_queryset = model.get_collection(**params)
 
         if self.options.force:
-            es_docs = [es_model(**doc) for doc in docs]
-
             self.logger.info('Recreating `{}` ES mapping'.format(
                 model_name))
-            es.delete_mapping()
-            es.put_mapping(body=model.get_es_mapping())
+            # TODO: Recreate mapping
             self.logger.info('Indexing all `{}` documents'.format(
                 model_name))
-            es.index(docs)
+            db_items_data = to_dicts(db_queryset)
         else:
             self.logger.info('Indexing missing `{}` documents'.format(
                 model_name))
-            es.index_missing_documents(docs)
+            pk_field = es_model.pk_field()
+            es_items = es_model.get_collection(**params)
+            es_pks = [getattr(doc, pk_field) for doc in es_items]
+            missing_items = [
+                item for item in db_queryset
+                if str(getattr(item, pk_field)) not in es_pks]
+            db_items_data = to_dicts(missing_items)
+
+        es_docs = [es_model(**data) for data in db_items_data]
+        es_model._index_many(es_docs)
