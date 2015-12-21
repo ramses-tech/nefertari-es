@@ -44,12 +44,6 @@ class IndexCommand(object):
             required=True)
         parser.add_argument(
             '--params', help='Url-encoded params for each model')
-
-        parser.add_argument(
-            '--chunk',
-            help=('Index chunk size. If chunk size not provided '
-                  '`elasticsearch.chunk_size` setting is used'),
-            type=int)
         parser.add_argument(
             '--force',
             help=('Recreate ES mappings and reindex all documents of provided '
@@ -57,6 +51,13 @@ class IndexCommand(object):
                   'index are indexed.'),
             action='store_true',
             default=False)
+
+        # TODO: Use or delete
+        # parser.add_argument(
+        #     '--chunk',
+        #     help=('Index chunk size. If chunk size not provided '
+        #           '`elasticsearch.chunk_size` setting is used'),
+        #     type=int)
 
         self._prepare_env(parser, logger)
 
@@ -96,28 +97,26 @@ class IndexCommand(object):
     def _index_model(self, model_name):
         self.logger.info('Processing model `{}`'.format(model_name))
         model = engine.get_document_cls(model_name)
+        es_model = model._secondary
 
         params = self.options.params or ''
         params = dict([
             [k, v[0]] for k, v in urllib.parse.parse_qs(params).items()
         ])
-        params.setdefault('_limit', params.get('_limit', 10000))
-        chunk_size = self.options.chunk or params['_limit']
-
-        es = ES(source=model_name, index_name=self.options.index,
-                chunk_size=chunk_size)
         query_set = model.get_collection(**params)
-        documents = to_dicts(query_set)
+        docs = to_dicts(query_set)
 
         if self.options.force:
+            es_docs = [es_model(**doc) for doc in docs]
+
             self.logger.info('Recreating `{}` ES mapping'.format(
                 model_name))
             es.delete_mapping()
             es.put_mapping(body=model.get_es_mapping())
             self.logger.info('Indexing all `{}` documents'.format(
                 model_name))
-            es.index(documents)
+            es.index(docs)
         else:
             self.logger.info('Indexing missing `{}` documents'.format(
                 model_name))
-            es.index_missing_documents(documents)
+            es.index_missing_documents(docs)

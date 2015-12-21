@@ -14,9 +14,6 @@ def handle_item_created(event):
     item = event.item
     es_model = item.__class__._secondary
     item_data = item.to_dict(_depth=0)
-    item_data.pop('_type', None)
-    item_data.pop('_version', None)
-    item_data.pop('_pk', None)
     es_model(**item_data).save()
 
 
@@ -28,8 +25,6 @@ def handle_item_updated(event):
 def _update_item(item):
     es_model = item.__class__._secondary
     item_data = item.to_dict(_depth=0)
-    item_data.pop('_type', None)
-    item_data.pop('_version', None)
     item_pk = item_data.pop('_pk', None)
     pk_field = es_model.pk_field()
     es_item = es_model.get_item(**{pk_field: item_pk})
@@ -75,9 +70,7 @@ def handle_bulk_updated(event):
         es_pk = str(getattr(es_item, pk_field))
         db_item = items[es_pk]
         db_item_data = db_item.to_dict(_depth=0)
-        db_item_data.pop('_type', None)
-        db_item_data.pop('_version', None)
-        db_item_data.pop('_pk', None)
+        es_item._pop_db_meta(db_item_data)
         es_item._update(db_item_data)
     es_model._index_many(es_items, request=event.request)
 

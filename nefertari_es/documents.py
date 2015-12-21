@@ -189,6 +189,7 @@ class BaseMixin(object):
     _request = None
 
     def __init__(self, *args, **kwargs):
+        self._pop_db_meta(kwargs)
         super(BaseMixin, self).__init__(*args, **kwargs)
         self._populate_id_field()
 
@@ -219,6 +220,10 @@ class BaseMixin(object):
             return hash(cls_name + str(pk))
 
         return _hasher
+
+    def _pop_db_meta(self, kw):
+        for key in ('_type', '_version', '_pk'):
+            kw.pop(key, None)
 
     def _populate_meta_id(self):
         """ Copy PK field value to meta["id"]. """
@@ -821,6 +826,7 @@ class BaseDocument(with_metaclass(
                 setattr(self, key, value)
 
     def update(self, params, **kw):
+        self._pop_db_meta(params)
         process_bools(params)
         _validate_fields(self.__class__, params.keys())
         self._update(params)
