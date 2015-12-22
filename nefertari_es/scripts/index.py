@@ -119,6 +119,13 @@ class IndexCommand(object):
             self.logger.info('Nothing to index')
             return
 
-        db_items_data = [itm.to_dict(_depth=0) for itm in missing_items]
+        self._index_docs(es_model, missing_items)
+
+    def _index_docs(self, es_model, db_items):
+        db_items_data = [itm.to_dict(_depth=0) for itm in db_items]
+        index_items = []
         for data in db_items_data:
-            es_model(**data).save()
+            es_item = es_model(**data)
+            es_item._populate_meta_id()
+            index_items.append(es_item)
+        es_model._index_many(index_items)
