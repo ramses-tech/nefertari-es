@@ -6,8 +6,7 @@ from pyramid.paster import bootstrap
 from pyramid.config import Configurator
 from six.moves import urllib
 
-from nefertari.utils import dictset, split_strip, to_dicts
-from nefertari.elasticsearch import ES
+from nefertari.utils import dictset, split_strip
 from nefertari import engine
 
 
@@ -24,9 +23,6 @@ def main(argv=sys.argv):
 
 
 class IndexCommand(object):
-
-    bootstrap = (bootstrap,)
-    stdout = sys.stdout
     usage = '%prog config_uri <models'
 
     def __init__(self, argv, logger):
@@ -57,7 +53,7 @@ class IndexCommand(object):
         if not self.options.config:
             return parser.print_help()
 
-        env = self.bootstrap[0](self.options.config)
+        env = bootstrap(self.options.config)
         registry = env['registry']
         # Include 'nefertari.engine' to setup engines
         config = Configurator(settings=registry.settings)
@@ -96,6 +92,7 @@ class IndexCommand(object):
         ])
         db_queryset = model.get_collection(
             _query_secondary=False, **params)
+
         pk_field = es_model.pk_field()
         db_pks = [getattr(dbobj, pk_field) for dbobj in db_queryset]
         es_items = es_model.get_collection(**{pk_field: db_pks})
