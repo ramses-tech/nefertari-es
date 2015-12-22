@@ -7,7 +7,6 @@ from six import (
 from elasticsearch_dsl import DocType
 from elasticsearch_dsl.utils import AttrList, AttrDict
 from elasticsearch_dsl.field import InnerObjectWrapper
-from elasticsearch_dsl.connections import connections as es_connections
 from elasticsearch import helpers
 from nefertari.json_httpexceptions import (
     JHTTPBadRequest,
@@ -807,6 +806,8 @@ class BaseDocument(with_metaclass(
 
     def save(self, request=None, refresh=True, **kwargs):
         self._populate_meta_id()
+        if self._is_created():
+            kwargs['op_type'] = 'create'
         super(BaseDocument, self).save(refresh=refresh, **kwargs)
         self._populate_id_field()
         return self
