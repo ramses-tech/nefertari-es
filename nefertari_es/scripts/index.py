@@ -46,9 +46,8 @@ class IndexCommand(object):
             '--params', help='Url-encoded params for each model')
         parser.add_argument(
             '--force',
-            help=('Reindex all documents of provided models. '
-                  'By default, only documents that are missing from '
-                  'index are indexed.'),
+            help=('Reindex all documents. By default only missing '
+                  'documents are indexed.'),
             action='store_true',
             default=False)
         self._prepare_env(parser, logger)
@@ -97,23 +96,29 @@ class IndexCommand(object):
         ])
         db_queryset = model.get_collection(
             _query_secondary=False, **params)
+        pk_field = es_model.pk_field()
+        db_pks = [getattr(dbobj, pk_field) for dbobj in db_queryset]
+        es_items = es_model.get_collection(**{pk_field: db_pks})
 
         if self.options.force:
+            self.logger.info('Deleting existing `{}` documents'.format(
+                model_name))
+            es_model._delete_many(es_items)
             self.logger.info('Indexing all `{}` documents'.format(
                 model_name))
-            db_items_data = to_dicts(db_queryset)
-            es_docs = [es_model(**data) for data in db_items_data]
-            es_model._index_many(es_docs)
+            missing_items = [item for item in db_queryset]
+        else:
+            self.logger.info('Indexing missing `{}` documents'.format(
+                model_name))
+            es_pks = [str(getattr(doc, pk_field)) for doc in es_items]
+            missing_items = [
+                item for item in db_queryset
+                if str(getattr(item, pk_field)) not in es_pks]
+
+        if not missing_items:
+            self.logger.info('Nothing to index')
             return
 
-        self.logger.info('Indexing missing `{}` documents'.format(
-            model_name))
-        pk_field = es_model.pk_field()
-        es_items = es_model.get_collection(**params)
-        es_pks = [str(getattr(doc, pk_field)) for doc in es_items]
-        missing_items = [
-            item for item in db_queryset
-            if str(getattr(item, pk_field)) not in es_pks]
-        db_items_data = to_dicts(missing_items)
+        db_items_data = [itm.to_dict(_depth=0) for itm in missing_items]
         for data in db_items_data:
             es_model(**data).save()
