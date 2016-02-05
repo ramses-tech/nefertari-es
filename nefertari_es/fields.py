@@ -250,6 +250,11 @@ class ChoiceField(CustomMappingMixin, BaseFieldMixin, field.String):
 class PickleField(CustomMappingMixin, BaseFieldMixin, field.String):
     _coerce = True
 
+    def clean(self, data):
+        if not data and self._required:
+            raise ValidationException("Value required for this field.")
+        return data
+
     def _to_python(self, data):
         if not data:
             return data

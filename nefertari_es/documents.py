@@ -198,8 +198,8 @@ class BaseMixin(object):
             pk_field = self.pk_field()
             self_pk = getattr(self, pk_field, None)
             other_pk = getattr(other, pk_field, None)
-            return (self_pk is not None and other_pk is not None
-                    and self_pk == other_pk)
+            return (self_pk is not None and other_pk is not None and
+                    self_pk == other_pk)
         return super(BaseMixin, self).__eq__(other)
 
     def __ne__(self, other):
