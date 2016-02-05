@@ -92,7 +92,7 @@ class IndexCommand(object):
         try:
             conn.indices.delete([index_name])
         except JHTTPNotFound:
-            return
+            pass
         self.logger.info('Creating index')
         nefertari_es.setup_index(conn)
 
