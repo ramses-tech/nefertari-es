@@ -28,15 +28,31 @@ class TestIndexCommand(object):
         cmd.run()
         assert not mock_ind.called
 
-    @patch('nefertari_es.scripts.index.IndexCommand._index_model')
+    @patch('nefertari_es.scripts.index.IndexCommand.index_models')
     @patch('nefertari.engine')
     def test_run(self, mock_eng, mock_ind, mock_prep):
         mock_eng.secondary = nefertari_es
         cmd = IndexCommand(None, None)
-        cmd.options = Mock(models='User,  Foo')
+        cmd.options = Mock(models='User', recreate=False)
         cmd.logger = Mock()
         cmd.run()
-        mock_ind.assert_has_calls([call('User'), call('Foo')])
+        mock_ind.assert_called_once_with(['User'])
+
+    @patch('nefertari_es.scripts.index.IndexCommand.index_models')
+    @patch('nefertari_es.scripts.index.IndexCommand.recreate_index')
+    @patch('nefertari_es.scripts.index.engine')
+    @patch('nefertari.engine')
+    def test_run_recreate(
+            self, mock_eng1, mock_eng2, mock_recr, mock_ind,
+            mock_prep):
+        mock_eng1.secondary = nefertari_es
+        cmd = IndexCommand(None, None)
+        cmd.options = Mock(recreate=True)
+        cmd.logger = Mock()
+        mock_eng2.get_document_classes.return_value = {'a': 1}
+        cmd.run()
+        mock_ind.assert_called_once_with(['a'])
+        mock_recr.assert_called_once_with()
 
     def test_index_docs(self, mock_prep):
         cmd = IndexCommand(None, None)
@@ -69,26 +85,4 @@ class TestIndexCommand(object):
             _query_secondary=False, foo='2')
         es_model.get_collection.assert_called_once_with(id=[1])
         assert not es_model._delete_many.called
-        mock_ind.assert_called_once_with(es_model, [item])
-
-    @patch('nefertari_es.scripts.index.IndexCommand._index_docs')
-    @patch('nefertari_es.scripts.index.engine')
-    def test_index_model_force(self, mock_eng, mock_ind, mock_prep):
-        es_model = Mock()
-        es_model.pk_field.return_value = 'id'
-        es_item = Mock(id=1)
-        es_model.get_collection.return_value = [es_item]
-        model = Mock(_secondary=es_model)
-        item = Mock(id=1)
-        model.get_collection.return_value = [item]
-        mock_eng.get_document_cls.return_value = model
-        cmd = IndexCommand(None, None)
-        cmd.logger = Mock()
-        cmd.options = Mock(force=True, params='foo=2')
-        cmd._index_model('Foo')
-        mock_eng.get_document_cls.assert_called_once_with('Foo')
-        model.get_collection.assert_called_once_with(
-            _query_secondary=False, foo='2')
-        es_model.get_collection.assert_called_once_with(id=[1])
-        es_model._delete_many.assert_called_once_with([es_item])
         mock_ind.assert_called_once_with(es_model, [item])
