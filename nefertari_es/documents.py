@@ -613,15 +613,12 @@ class BaseMixin(object):
     @classmethod
     def aggregate(cls, _aggs_params, _strict=False, _fields=None,
                   q=None, _search_fields=None, search_obj=None,
-                  _search_type='count', **params):
+                  **params):
         """ Perform aggreration
 
         Arguments:
             :_aggs_params: Dict of aggregation params. Root key is an
                 aggregation name. Required.
-            :_search_type: Type of search to use. Optional, defaults to
-                'count'. You might want to provide this argument explicitly
-                when performing nested aggregations on buckets.
         """
         params.pop('_limit', None)
         search_passed = search_obj is not None
@@ -630,7 +627,6 @@ class BaseMixin(object):
 
         # Set limit so ES won't complain. It is ignored in the end
         search_obj.update_from_dict({'aggregations': _aggs_params})
-        search_obj = search_obj.params(search_type=_search_type)
         if _fields:
             search_obj = cls._apply_search_fields(
                 search_obj, _fields, _strict, search_passed)

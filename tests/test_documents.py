@@ -953,22 +953,20 @@ class TestAggregate(object):
         result = simple_model.aggregate(self.agg)
         mock_search().update_from_dict.assert_called_once_with(
             {'aggregations': self.agg})
-        mock_search().params.assert_called_once_with(
-            search_type='count')
-        assert result == mock_search().params().execute().aggregations
+        assert result == mock_search().execute().aggregations
 
     @patch('nefertari_es.documents.BaseMixin._apply_search_fields')
     def test_fields_param(self, mock_fields, mock_search, simple_model):
         result = simple_model.aggregate(self.agg, _fields='a,b')
         mock_fields.assert_called_once_with(
-            mock_search().params(), 'a,b', False, False)
+            mock_search(), 'a,b', False, False)
         assert result == mock_fields().execute().aggregations
 
     @patch('nefertari_es.documents.BaseMixin._apply_search_params')
     def test_params_param(self, mock_params, mock_search, simple_model):
         result = simple_model.aggregate(self.agg, foo=1)
         mock_params.assert_called_once_with(
-            mock_search().params(), False, False, foo=1)
+            mock_search(), False, False, foo=1)
         assert result == mock_params().execute().aggregations
 
     @patch('nefertari_es.documents.BaseMixin._apply_search_query')
@@ -976,5 +974,5 @@ class TestAggregate(object):
         result = simple_model.aggregate(
             self.agg, q='a', _search_fields='b,c')
         mock_query.assert_called_once_with(
-            mock_search().params(), 'a', 'b,c')
+            mock_search(), 'a', 'b,c')
         assert result == mock_query().execute().aggregations
