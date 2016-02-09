@@ -6,7 +6,7 @@ from setuptools import (
 
 install_requires = [
     'elasticsearch',
-    'elasticsearch-dsl==0.0.8',
+    'elasticsearch-dsl==0.0.11',
     'nefertari',
 ]
 

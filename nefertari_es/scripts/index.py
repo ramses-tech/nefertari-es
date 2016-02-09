@@ -7,6 +7,7 @@ from pyramid.config import Configurator
 from six.moves import urllib
 
 from nefertari.utils import dictset, split_strip
+from nefertari.json_httpexceptions import JHTTPNotFound
 from nefertari import engine
 
 
@@ -23,8 +24,6 @@ def main(argv=sys.argv):
 
 
 class IndexCommand(object):
-    usage = '%prog config_uri <models'
-
     def __init__(self, argv, logger):
         parser = ArgumentParser(description=__doc__)
         parser.add_argument(
@@ -34,16 +33,15 @@ class IndexCommand(object):
             '--quiet', help='Quiet mode', action='store_true',
             default=False)
         parser.add_argument(
-            '--models',
-            help=('Comma-separated list of model names to index '
-                  '(required)'),
-            required=True)
-        parser.add_argument(
             '--params', help='Url-encoded params for each model')
-        parser.add_argument(
-            '--force',
-            help=('Reindex all documents. By default only missing '
-                  'documents are indexed.'),
+
+        group = parser.add_mutually_exclusive_group(required=True)
+        group.add_argument(
+            '--models',
+            help=('Comma-separated list of model names to index'))
+        group.add_argument(
+            '--recreate',
+            help='Recreate index and reindex all documents',
             action='store_true',
             default=False)
         self._prepare_env(parser, logger)
@@ -77,7 +75,28 @@ class IndexCommand(object):
                 'engine')
             return
 
-        model_names = split_strip(self.options.models)
+        if self.options.recreate:
+            self.recreate_index()
+            models = engine.get_document_classes()
+            model_names = list(models.keys())
+        else:
+            model_names = split_strip(self.options.models)
+        self.index_models(model_names)
+
+    def recreate_index(self):
+        import nefertari_es
+        from elasticsearch_dsl.connections import connections
+        conn = connections.get_connection()
+        self.logger.info('Deleting index')
+        index_name = nefertari_es.ESSettings['index_name']
+        try:
+            conn.indices.delete([index_name])
+        except JHTTPNotFound:
+            pass
+        self.logger.info('Creating index')
+        nefertari_es.setup_index(conn)
+
+    def index_models(self, model_names):
         for model_name in model_names:
             self._index_model(model_name)
 
@@ -96,21 +115,12 @@ class IndexCommand(object):
         pk_field = es_model.pk_field()
         db_pks = [getattr(dbobj, pk_field) for dbobj in db_queryset]
         es_items = es_model.get_collection(**{pk_field: db_pks})
-
-        if self.options.force:
-            self.logger.info('Deleting existing `{}` documents'.format(
-                model_name))
-            es_model._delete_many(es_items)
-            self.logger.info('Indexing all `{}` documents'.format(
-                model_name))
-            missing_items = [item for item in db_queryset]
-        else:
-            self.logger.info('Indexing missing `{}` documents'.format(
-                model_name))
-            es_pks = [str(getattr(doc, pk_field)) for doc in es_items]
-            missing_items = [
-                item for item in db_queryset
-                if str(getattr(item, pk_field)) not in es_pks]
+        self.logger.info('Indexing missing `{}` documents'.format(
+            model_name))
+        es_pks = [str(getattr(doc, pk_field)) for doc in es_items]
+        missing_items = [
+            item for item in db_queryset
+            if str(getattr(item, pk_field)) not in es_pks]
 
         if not missing_items:
             self.logger.info('Nothing to index')
